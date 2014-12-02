@@ -1620,6 +1620,9 @@ INSTALLED_APPS = (
     'survey',
 
     'lms.djangoapps.lms_xblock',
+
+    # edX Server API
+    'server_api',
 )
 
 ######################### MARKETING SITE ###############################
@@ -2024,3 +2027,7 @@ PDF_RECEIPT_COBRAND_LOGO_HEIGHT_MM = 12
 SEARCH_ENGINE = None
 # Use the LMS specific result processor
 SEARCH_RESULT_PROCESSOR = "lms.lib.courseware_search.lms_result_processor.LmsSearchResultProcessor"
+
+
+############# OPEN EDX SERVER API #################
+FEATURES['SERVER_API'] = False

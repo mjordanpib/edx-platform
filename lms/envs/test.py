@@ -460,3 +460,7 @@ FEATURES['ENTRANCE_EXAMS'] = True
 FEATURES['ENABLE_COURSEWARE_SEARCH'] = True
 # Use MockSearchEngine as the search engine for test scenario
 SEARCH_ENGINE = "search.tests.mock_search_engine.MockSearchEngine"
+
+
+############# OPEN EDX SERVER API #################
+FEATURES['SERVER_API'] = True
