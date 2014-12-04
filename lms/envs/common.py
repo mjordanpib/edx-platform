@@ -1620,9 +1620,7 @@ INSTALLED_APPS = (
     'survey',
 
     'lms.djangoapps.lms_xblock',
-
-    # edX Server API
-    'server_api',
+    'course_api',
 )
 
 ######################### MARKETING SITE ###############################

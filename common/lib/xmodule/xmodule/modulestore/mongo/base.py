@@ -1084,7 +1084,8 @@ class MongoModuleStore(ModuleStoreDraftAndPublished, ModuleStoreWriteBase, Mongo
             sort=[SORT_REVISION_FAVOR_DRAFT],
         )
 
-        modules = self._load_items(course_id, list(items))
+        depth = kwargs.get('depth', 0)
+        modules = self._load_items(course_id, list(items), depth=depth)
         return modules
 
     def create_course(self, org, course, run, user_id, fields=None, **kwargs):
