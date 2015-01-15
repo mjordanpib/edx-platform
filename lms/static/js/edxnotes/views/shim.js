@@ -107,11 +107,13 @@ define([
                 '<a href="#" title="', _t('View as webpage'), '" class="annotator-link">',
                     _t('View as webpage'),
                 '</a>',
-                '<button title="', _t('Edit'), '" class="annotator-edit">',
+                '<button class="annotator-edit">',
                     _t('Edit'),
+                    '<span class="sr">', _t('Note'), '</span>',
                 '</button>',
-                '<button title="', _t('Delete'), '" class="annotator-delete">',
+                '<button class="annotator-delete">',
                     _t('Delete'),
+                    '<span class="sr">', _t('Note'), '</span>',
                 '</button>',
             '</span>',
         '</li>'
@@ -134,8 +136,8 @@ define([
                         $(field).html(Utils.nl2br(Annotator.Util.escape(annotation.text)));
                     } else {
                         $(field).html('<i>' + _t('No Comment') + '</i>');
-                        self.publish('annotationViewerTextField', [field, annotation]);
                     }
+                    return self.publish('annotationViewerTextField', [field, annotation]);
                 }
             })
             .element.appendTo(this.wrapper).bind({
@@ -146,6 +148,43 @@ define([
     };
 
     Annotator.Editor.prototype.isShown = Annotator.Viewer.prototype.isShown;
+
+    /* Modifies Annotator.Editor.html template to reverse order of Save and
+     * Cancel buttons.
+     **/
+    Annotator.Editor.prototype.html = [
+        '<div class="annotator-outer annotator-editor">',
+            '<form class="annotator-widget">',
+                '<ul class="annotator-listing"></ul>',
+                '<div class="annotator-controls">',
+                    '<button class="annotator-save">',
+                        _t('Save'),
+                        '<span class="sr">', _t('Note'), '</span>',
+                    '</button>',
+                    '<button class="annotator-cancel">',
+                        _t('Cancel'),
+                    '</button>',
+                '</div>',
+            '</form>',
+        '</div>'
+    ].join('');
+
+    /**
+     * Modifies Annotator.Editor.show to remove focus on Save button.
+     **/
+    Annotator.Editor.prototype.show = _.compose(
+        function () {
+            this.element.find('.annotator-save').removeClass(this.classes.focus);
+        },
+        Annotator.Editor.prototype.show
+    );
+
+    /**
+     * Removes the textarea keydown event handler as it triggers 'processKeypress'
+     * which hides the viewer on ESC and saves on ENTER. We will define different
+     * behaviors for these in /plugins/accessibility.js
+     **/
+    delete Annotator.Editor.prototype.events["textarea keydown"];
 
     /**
      * Modifies Annotator.onHighlightMouseover to avoid showing the viewer if the
