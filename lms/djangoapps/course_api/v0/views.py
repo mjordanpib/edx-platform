@@ -8,6 +8,7 @@ from rest_framework.generics import RetrieveAPIView, ListAPIView
 from xmodule.modulestore.django import modulestore
 from opaque_keys.edx.keys import CourseKey
 from openedx.core.lib.api.views import PaginatedListAPIViewWithKeyHeaderPermissions, ApiKeyHeaderPermissionMixin
+
 from course_api.courseware_access import get_course, get_course_child, get_course_descriptor
 from course_api.v0 import serializers
 
@@ -249,82 +250,19 @@ class CourseDetail(CourseContentMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIV
         return course_descriptor
 
 
-class CourseGradedContent(CourseContentMixin, ApiKeyHeaderPermissionMixin, ListAPIView):
-    """
-    **Use Case**
+class CourseStructure(CourseContentMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView):
+    serializer_class = serializers.CourseStructureSerializer
 
-        Retrieves course graded content and filtered children.
-
-    **Example requests**:
-
-        GET /{course_id}/graded_content/?filter_children_category=problem
-
-    **Response Values**
-
-        * category: The type of content.
-
-        * name: The name of the content entity.
-
-        * uri: The URI of the content entity.
-
-        * id: The unique identifier for the course.
-
-        * children: Content entities that this content entity contains.
-
-        * format: The type of the content (e.g. Exam, Homework). Note: These values are course-dependent.
-          Do not make any assumptions based on assignment type.
-
-        * problems: {
-            * id: The ID of the problem.
-
-            * name: The name of the problem.
-        }
-    """
-
-    serializer_class = serializers.GradedContentSerializer
-    allow_empty = False
-
-    def _filter_children(self, node, **kwargs):
-        """ Retrieve the problems from the node/tree. """
-
-        matched = True
-        for name, value in kwargs.iteritems():
-            matched &= (getattr(node, name, None) == value)
-            if not matched:
-                break
-
-        if matched:
-            return [node]
-
-        if not node.has_children:
-            return []
-
-        problems = []
-        for child in node.get_children():
-            problems += self._filter_children(child, **kwargs)
-
-        return problems
-
-    def depth(self, request):
-        # Load the entire content tree since we will need to filter down to the leaf nodes.
-        return None
-
-    def get_queryset(self):
+    def get_object(self, queryset=None):
         course_id = self.kwargs.get('course_id')
-        course_descriptor = self.get_course_or_404(self.request, course_id)
-        course_key = course_descriptor.id
+        course_key = CourseKey.from_string(course_id)
         _modulestore = modulestore()
 
-        items = _modulestore.get_items(course_key, settings={'graded': True}, depth=None)
-        category = self.request.QUERY_PARAMS.get('filter_children_category')
+        # Ensure the course exists before doing any processing
+        if not _modulestore.has_course(course_key):
+            raise Http404
 
-        if not category:
-            raise ParseError('The parameter filter_children_category must be supplied.')
-
-        for item in items:
-            item.children = self._filter_children(item, category=category)
-
-        return items
+        return _modulestore.get_course_structure(course_key)
 
 
 class CourseGradingPolicy(ApiKeyHeaderPermissionMixin, ListAPIView):

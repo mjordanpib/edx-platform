@@ -9,7 +9,7 @@ from rest_framework.urlpatterns import format_suffix_patterns
 from course_api.v0 import views
 
 
-CONTENT_ID_PATTERN = r'(?P<content_id>[\.a-zA-Z0-9_+\/:-]+)'
+CONTENT_ID_PATTERN = settings.USAGE_ID_PATTERN.replace('usage_id', 'content_id')
 COURSE_ID_PATTERN = settings.COURSE_ID_PATTERN
 
 # pylint: disable=invalid-name
@@ -22,8 +22,8 @@ content_patterns = patterns(
 course_patterns = patterns(
     '',
     url(r'^$', views.CourseDetail.as_view(), name='detail'),
-    url(r'^graded_content/$', views.CourseGradedContent.as_view(), name='graded_content'),
     url(r'^grading_policy/$', views.CourseGradingPolicy.as_view(), name='grading_policy'),
+    url(r'^structure/$', views.CourseStructure.as_view(), name='structure'),
     url(r'^content/', include(content_patterns, namespace='content')),
 )
 

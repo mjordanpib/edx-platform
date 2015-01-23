@@ -282,34 +282,53 @@ class CourseContentDetailTests(CourseDetailMixin, CourseViewTestsMixin, ModuleSt
 
 @override_settings(MODULESTORE=TEST_DATA_MOCK_MODULESTORE)
 @override_settings(EDX_API_KEY=TEST_API_KEY)
-class CourseGradedContentTests(CourseDetailMixin, CourseViewTestsMixin, ModuleStoreTestCase):
-    view = 'course_api_v0:graded_content'
+class CourseStructureTests(CourseDetailMixin, CourseViewTestsMixin, ModuleStoreTestCase):
+    view = 'course_api_v0:structure'
 
     def test_get(self):
         """
-        The view should return graded content for a course.
+        The view should return the structure for a course.
         """
-        url = reverse(self.view, kwargs={'course_id': self.COURSE_ID}) + '?filter_children_category=problem'
+        url = reverse(self.view, kwargs={'course_id': self.COURSE_ID})
         response = self.http_get(url)
         self.assertEqual(response.status_code, 200)
 
-        expected = self.serialize_content(self.GRADED_CONTENT)
-        expected['format'] = 'Homework'
-        expected['children'] = [self.serialize_content(self.PROBLEM, include_children=True)]
-        expected = [expected]
-        self.assertListEqual(response.data, expected)
-
-    def test_get_without_filter(self):
-        """ The view should return a 400 if no filter is provided. """
-        url = reverse(self.view, kwargs={'course_id': self.COURSE_ID})
-        response = self.http_get(url)
-        self.assertEqual(response.status_code, 400)
+        expected = {
+            u'root': unicode(self.COURSE.location),
+            u'blocks': {
+                unicode(self.COURSE.location): {
+                    u'id': unicode(self.COURSE.location),
+                    u'type': u'course',
+                    u'display_name': self.COURSE_NAME,
+                    u'format': None,
+                    u'graded': False,
+                    u'children': [unicode(self.GRADED_CONTENT.location)]
+                },
+                unicode(self.GRADED_CONTENT.location): {
+                    u'id': unicode(self.GRADED_CONTENT.location),
+                    u'type': self.GRADED_CONTENT.category,
+                    u'display_name': self.GRADED_CONTENT.display_name,
+                    u'format': self.GRADED_CONTENT.format,
+                    u'graded': self.GRADED_CONTENT.graded,
+                    u'children': [unicode(self.PROBLEM.location)]
+                },
+                unicode(self.PROBLEM.location): {
+                    u'id': unicode(self.PROBLEM.location),
+                    u'type': self.PROBLEM.category,
+                    u'display_name': self.PROBLEM.display_name,
+                    u'format': self.PROBLEM.format,
+                    u'graded': self.PROBLEM.graded,
+                    u'children': []
+                },
+            }
+        }
+        self.assertDictEqual(response.data, expected)
 
     def test_get_invalid_course(self):
         """
         The view should return a 404 if the course ID is invalid.
         """
-        url = reverse(self.view, kwargs={'course_id': self.INVALID_COURSE_ID}) + '?filter_children_category=problem'
+        url = reverse(self.view, kwargs={'course_id': self.INVALID_COURSE_ID})
         response = self.http_get(url)
         self.assertEqual(response.status_code, 404)
 
