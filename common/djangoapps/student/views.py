@@ -89,7 +89,9 @@ import dogstats_wrapper as dog_stats_api
 from util.db import commit_on_success_with_read_committed
 from util.json_request import JsonResponse
 from util.bad_request_rate_limiter import BadRequestRateLimiter
-
+from util.milestones_helpers import (
+    get_pre_requisite_courses_not_completed,
+)
 from microsite_configuration import microsite
 
 from util.password_policy_validators import (
@@ -540,8 +542,11 @@ def dashboard(request):
         staff_access = True
         errored_courses = modulestore().get_errored_courses()
 
-    show_courseware_links_for = frozenset(course.id for course, _enrollment in course_enrollment_pairs
-                                          if has_access(request.user, 'load', course))
+    show_courseware_links_for = frozenset(
+        course.id for course, _enrollment in course_enrollment_pairs
+        if has_access(request.user, 'load', course)
+        and has_access(request.user, 'view_courseware_with_prerequisites', course)
+    )
 
     # Construct a dictionary of course mode information
     # used to render the course list.  We re-use the course modes dict
@@ -652,6 +657,11 @@ def dashboard(request):
     # Populate the Order History for the side-bar.
     order_history_list = order_history(user, course_org_filter=course_org_filter, org_filter_out_set=org_filter_out_set)
 
+    # get list of courses having pre-requisites yet to be completed
+    courses_having_prerequisites = frozenset(course.id for course, _enrollment in course_enrollment_pairs
+                                             if course.pre_requisite_courses)
+    courses_requirements_not_met = get_pre_requisite_courses_not_completed(user, courses_having_prerequisites)
+
     context = {
         'enrollment_message': enrollment_message,
         'course_enrollment_pairs': course_enrollment_pairs,
@@ -681,7 +691,8 @@ def dashboard(request):
         'platform_name': settings.PLATFORM_NAME,
         'enrolled_courses_either_paid': enrolled_courses_either_paid,
         'provider_states': [],
-        'order_history_list': order_history_list
+        'order_history_list': order_history_list,
+        'courses_requirements_not_met': courses_requirements_not_met,
     }
 
     if third_party_auth.is_enabled():
@@ -712,9 +723,9 @@ def _create_recent_enrollment_message(course_enrollment_pairs, course_modes):
             {
                 "course_id": course.id,
                 "course_name": course.display_name,
-                "allow_donation": _allow_donation(course_modes, course.id)
+                "allow_donation": _allow_donation(course_modes, course.id, enrollment)
             }
-            for course in recently_enrolled_courses
+            for course, enrollment in recently_enrolled_courses
         ]
 
         return render_to_string(
@@ -738,14 +749,14 @@ def _get_recently_enrolled_courses(course_enrollment_pairs):
     seconds = DashboardConfiguration.current().recent_enrollment_time_delta
     time_delta = (datetime.datetime.now(UTC) - datetime.timedelta(seconds=seconds))
     return [
-        course for course, enrollment in course_enrollment_pairs
+        (course, enrollment) for course, enrollment in course_enrollment_pairs
         # If the enrollment has no created date, we are explicitly excluding the course
         # from the list of recent enrollments.
         if enrollment.is_active and enrollment.created > time_delta
     ]
 
 
-def _allow_donation(course_modes, course_id):
+def _allow_donation(course_modes, course_id, enrollment):
     """Determines if the dashboard will request donations for the given course.
 
     Check if donations are configured for the platform, and if the current course is accepting donations.
@@ -753,15 +764,14 @@ def _allow_donation(course_modes, course_id):
     Args:
         course_modes (dict): Mapping of course ID's to course mode dictionaries.
         course_id (str): The unique identifier for the course.
+        enrollment(CourseEnrollment): The enrollment object in which the user is enrolled
 
     Returns:
         True if the course is allowing donations.
 
     """
     donations_enabled = DonationConfiguration.current().enabled
-    is_verified_mode = CourseMode.has_verified_mode(course_modes[course_id])
-    has_payment_option = CourseMode.has_payment_options(course_id)
-    return donations_enabled and not is_verified_mode and not has_payment_option
+    return donations_enabled and enrollment.mode in course_modes[course_id] and course_modes[course_id][enrollment.mode].min_price == 0
 
 
 def try_change_enrollment(request):
@@ -1746,6 +1756,7 @@ def auto_auth(request):
     * `staff`: Set to "true" to make the user global staff.
     * `course_id`: Enroll the student in the course with `course_id`
     * `roles`: Comma-separated list of roles to grant the student in the course with `course_id`
+    * `no_login`: Define this to create the user but not login
 
     If username, email, or password are not provided, use
     randomly generated credentials.
@@ -1765,6 +1776,7 @@ def auto_auth(request):
     if course_id:
         course_key = CourseLocator.from_string(course_id)
     role_names = [v.strip() for v in request.GET.get('roles', '').split(',') if v.strip()]
+    login_when_done = 'no_login' not in request.GET
 
     # Get or create the user object
     post_data = {
@@ -1808,14 +1820,16 @@ def auto_auth(request):
         user.roles.add(role)
 
     # Log in as the user
-    user = authenticate(username=username, password=password)
-    login(request, user)
+    if login_when_done:
+        user = authenticate(username=username, password=password)
+        login(request, user)
 
     create_comments_service_user(user)
 
     # Provide the user with a valid CSRF token
     # then return a 200 response
-    success_msg = u"Logged in user {0} ({1}) with password {2} and user_id {3}".format(
+    success_msg = u"{} user {} ({}) with password {} and user_id {}".format(
+        u"Logged in" if login_when_done else "Created",
         username, email, password, user.id
     )
     response = HttpResponse(success_msg)

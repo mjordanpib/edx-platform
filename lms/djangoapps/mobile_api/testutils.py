@@ -5,8 +5,8 @@ Test utilities for mobile API tests:
      No tests are implemented in this base class.
 
   Test Mixins to be included by concrete test classes and provide implementation of common test methods:
-     MobileAuthTestMixin - tests for APIs with MobileView/mobile_view and is_user=False.
-     MobileAuthUserTestMixin - tests for APIs with MobileView/mobile_view and is_user=True.
+     MobileAuthTestMixin - tests for APIs with mobile_view and is_user=False.
+     MobileAuthUserTestMixin - tests for APIs with mobile_view and is_user=True.
      MobileCourseAccessTestMixin - tests for APIs with mobile_course_access and verify_enrolled=False.
      MobileEnrolledCourseAccessTestMixin - tests for APIs with mobile_course_access and verify_enrolled=True.
 """
@@ -24,15 +24,6 @@ from student.models import CourseEnrollment
 
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import CourseFactory
-
-
-# A tuple of Role Types and Boolean values that indicate whether access should be given to that role.
-ROLE_CASES = (
-    (auth.CourseBetaTesterRole, True),
-    (auth.CourseStaffRole, True),
-    (auth.CourseInstructorRole, True),
-    (None, False)
-)
 
 
 class MobileAPITestCase(ModuleStoreTestCase, APITestCase):
@@ -101,7 +92,7 @@ class MobileAPITestCase(ModuleStoreTestCase, APITestCase):
 
 class MobileAuthTestMixin(object):
     """
-    Test Mixin for testing APIs decorated with MobileView or mobile_view.
+    Test Mixin for testing APIs decorated with mobile_view.
     """
     def test_no_auth(self):
         self.logout()
@@ -110,7 +101,7 @@ class MobileAuthTestMixin(object):
 
 class MobileAuthUserTestMixin(MobileAuthTestMixin):
     """
-    Test Mixin for testing APIs related to users: mobile_view or MobileView with is_user=True.
+    Test Mixin for testing APIs related to users: mobile_view with is_user=True.
     """
     def test_invalid_user(self):
         self.login_and_enroll()
@@ -140,6 +131,8 @@ class MobileCourseAccessTestMixin(object):
     Subclasses are expected to inherit from MobileAPITestCase.
     Subclasses can override verify_success, verify_failure, and init_course_access methods.
     """
+    ALLOW_ACCESS_TO_UNRELEASED_COURSE = False  # pylint: disable=invalid-name
+
     def verify_success(self, response):
         """Base implementation of verifying a successful response."""
         self.assertEqual(response.status_code, 200)
@@ -170,9 +163,18 @@ class MobileCourseAccessTestMixin(object):
         self.init_course_access()
 
         response = self.api_response(expected_response_code=None)
-        self.verify_failure(response)  # allow subclasses to override verification
+        if self.ALLOW_ACCESS_TO_UNRELEASED_COURSE:
+            self.verify_success(response)
+        else:
+            self.verify_failure(response)
 
-    @ddt.data(*ROLE_CASES)
+    # A tuple of Role Types and Boolean values that indicate whether access should be given to that role.
+    @ddt.data(
+        (auth.CourseBetaTesterRole, True),
+        (auth.CourseStaffRole, True),
+        (auth.CourseInstructorRole, True),
+        (None, False)
+    )
     @ddt.unpack
     def test_non_mobile_available(self, role, should_succeed):
         self.init_course_access()

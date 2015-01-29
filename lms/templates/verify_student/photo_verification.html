@@ -376,8 +376,8 @@
                     <h4 class="title">${_("Check Your Name")}</h4>
 
                     <div class="copy">
-                        <p>${_("Make sure your full name on your {platform_name} account ({full_name}) matches your ID. We will also use this as the name on your certificate.").format(
-                          full_name="<span id='full-name'>{name}</span>".format(name=user_full_name),
+                        <p>${_(u"Make sure your full name on your {platform_name} account ({full_name}) matches your ID. We will also use this as the name on your certificate.").format(
+                          full_name=u"<span id='full-name'>{name}</span>".format(name=user_full_name),
                           platform_name=settings.PLATFORM_NAME,
                         )}</p>
                     </div>
@@ -394,7 +394,11 @@
                     <h4 class="title">${_("Check Your Contribution Level")}</h4>
 
                     <div class="copy">
-                      <p>${_("Please confirm your contribution for this course (min. $")} ${min_price} <span class="denomination-name">${currency}</span>${_("):")}</p>
+		      ## Translators: The last part of this string will appear such as: "(min. 50 USD)"
+                      <p>${_("Please confirm your contribution for this course (min. {min_price} {currency}):").format(
+			  min_price=min_price,
+			  currency=u"<span class='denomination-name'>{}</span>".format(currency)
+			)}</p>
                     </div>
 
                     <%include file="/course_modes/_contribution.html" args="suggested_prices=suggested_prices, currency=currency, chosen_price=chosen_price, min_price=min_price"/>

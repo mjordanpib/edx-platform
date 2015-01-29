@@ -10,6 +10,8 @@ from microsite_configuration import microsite
 if settings.DEBUG or settings.FEATURES.get('ENABLE_DJANGO_ADMIN_SITE'):
     admin.autodiscover()
 
+# Use urlpatterns formatted as within the Django docs with first parameter "stuck" to the open parenthesis
+# pylint: disable=bad-continuation
 urlpatterns = ('',  # nopep8
     # certificate view
     url(r'^update_certificate$', 'certificates.views.update_certificate'),
@@ -78,6 +80,9 @@ urlpatterns = ('',  # nopep8
 
     # CourseInfo API RESTful endpoints
     url(r'^api/course/details/v0/', include('course_about.urls')),
+
+    # Courseware search endpoints
+    url(r'^search/', include('search.urls')),
 
 )
 
@@ -345,11 +350,8 @@ if settings.COURSEWARE_ENABLED:
             'open_ended_grading.views.take_action_on_flags', name='open_ended_flagged_problems_take_action'),
 
         # Cohorts management
-        url(r'^courses/{}/cohorts$'.format(settings.COURSE_KEY_PATTERN),
-            'openedx.core.djangoapps.course_groups.views.list_cohorts', name="cohorts"),
-        url(r'^courses/{}/cohorts/add$'.format(settings.COURSE_KEY_PATTERN),
-            'openedx.core.djangoapps.course_groups.views.add_cohort',
-            name="add_cohort"),
+        url(r'^courses/{}/cohorts/(?P<cohort_id>[0-9]+)?$'.format(settings.COURSE_KEY_PATTERN),
+            'openedx.core.djangoapps.course_groups.views.cohort_handler', name="cohorts"),
         url(r'^courses/{}/cohorts/(?P<cohort_id>[0-9]+)$'.format(settings.COURSE_KEY_PATTERN),
             'openedx.core.djangoapps.course_groups.views.users_in_cohort',
             name="list_cohort"),
@@ -380,12 +382,17 @@ if settings.COURSEWARE_ENABLED:
         # Student account and profile
         url(r'^account/', include('student_account.urls')),
         url(r'^profile/', include('student_profile.urls')),
+
+        # Student Notes
+        url(r'^courses/{}/edxnotes'.format(settings.COURSE_ID_PATTERN),
+            include('edxnotes.urls'), name="edxnotes_endpoints"),
     )
 
     # allow course staff to change to student view of courseware
     if settings.FEATURES.get('ENABLE_MASQUERADE'):
         urlpatterns += (
-            url(r'^masquerade/(?P<marg>.*)$', 'courseware.masquerade.handle_ajax', name="masquerade-switch"),
+            url(r'^courses/{}/masquerade$'.format(settings.COURSE_KEY_PATTERN),
+                'courseware.masquerade.handle_ajax', name="masquerade_update"),
         )
 
     # discussion forums live within courseware, so courseware must be enabled first

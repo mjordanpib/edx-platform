@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 This config file runs the simplest dev environment using sqlite, and db-based
 sessions. Assumes structure:
@@ -11,6 +12,11 @@ sessions. Assumes structure:
 # We intentionally define lots of variables that aren't used, and
 # want to import all variables from base settings files
 # pylint: disable=wildcard-import, unused-wildcard-import
+
+# Pylint gets confused by path.py instances, which report themselves as class
+# objects. As a result, pylint applies the wrong regex in validating names,
+# and throws spurious errors. Therefore, we disable invalid-name checking.
+# pylint: disable=invalid-name
 
 from .common import *
 import os
@@ -73,6 +79,8 @@ STATICFILES_DIRS += [
 STATICFILES_STORAGE = 'pipeline.storage.NonPackagingPipelineStorage'
 STATIC_URL = "/static/"
 PIPELINE_ENABLED = False
+
+TENDER_DOMAIN = "help.edge.edx.org"
 
 # Update module store settings per defaults for tests
 update_module_store_settings(
@@ -153,6 +161,9 @@ CACHES = {
 # Add external_auth to Installed apps for testing
 INSTALLED_APPS += ('external_auth', )
 
+# Add milestones to Installed apps for testing
+INSTALLED_APPS += ('milestones', )
+
 # hide ratelimit warnings while running tests
 filterwarnings('ignore', message='No request passed to the backend, unable to rate-limit')
 
@@ -226,3 +237,28 @@ FEATURES['USE_MICROSITES'] = True
 # For consistency in user-experience, keep the value of this setting in sync with
 # the one in lms/envs/test.py
 FEATURES['ENABLE_DISCUSSION_SERVICE'] = False
+
+
+# Enable content libraries code for the tests
+FEATURES['ENABLE_CONTENT_LIBRARIES'] = True
+
+FEATURES['ENABLE_EDXNOTES'] = True
+
+# MILESTONES
+FEATURES['MILESTONES_APP'] = True
+
+# ENTRANCE EXAMS
+FEATURES['ENTRANCE_EXAMS'] = True
+ENTRANCE_EXAM_MIN_SCORE_PCT = 50
+
+VIDEO_CDN_URL = {
+    'CN': 'http://api.xuetangx.com/edx/video?s3_url='
+}
+
+# Courseware Search Index
+FEATURES['ENABLE_COURSEWARE_INDEX'] = True
+SEARCH_ENGINE = "search.tests.mock_search_engine.MockSearchEngine"
+# Path at which to store the mock index
+MOCK_SEARCH_BACKING_FILE = (
+    TEST_ROOT / "index_file.dat"  # pylint: disable=no-value-for-parameter
+).abspath()
