@@ -60,6 +60,15 @@ div.course-wrapper {
       }
     }
 
+    .required-content-msg {
+      margin-bottom: 20px;
+      background-color: $gray-l4;
+      color: $black-t2;
+      font-size: 13px;
+      padding: 5px 10px;
+      margin-top: -20px;
+    }
+
     ul {
       li {
         margin-bottom: lh(0.5);
