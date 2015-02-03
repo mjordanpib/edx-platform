@@ -3,9 +3,11 @@
 End-to-end tests for the LMS.
 """
 
+from datetime import datetime
 from textwrap import dedent
 from unittest import skip
 from nose.plugins.attrib import attr
+from pymongo import MongoClient
 
 from bok_choy.promise import EmptyPromise
 from bok_choy.web_app_test import WebAppTest
@@ -214,6 +216,8 @@ class PayAndVerifyTest(UniqueCourseTest):
         self.upgrade_page = PaymentAndVerificationFlow(self.browser, self.course_id, entry_point='upgrade')
         self.fake_payment_page = FakePaymentPage(self.browser, self.course_id)
         self.dashboard_page = DashboardPage(self.browser)
+        self.event_collection = MongoClient()["test"]["events"]
+        self.start_time = datetime.now()
 
         # Create a course
         CourseFixture(
@@ -269,7 +273,7 @@ class PayAndVerifyTest(UniqueCourseTest):
 
     def test_deferred_verification_enrollment(self):
         # Create a user and log them in
-        AutoAuthPage(self.browser).visit()
+        student_id = AutoAuthPage(self.browser).visit().get_user_id()
 
         # Navigate to the track selection page
         self.track_selection_page.visit()
@@ -290,9 +294,19 @@ class PayAndVerifyTest(UniqueCourseTest):
         enrollment_mode = self.dashboard_page.get_enrollment_mode(self.course_info["display_name"])
         self.assertEqual(enrollment_mode, 'verified')
 
+        # Expect enrollment activated event
+        self.assertEqual(
+            self.event_collection.find({
+                "name": "edx.course.enrollment.activated",
+                "time": {"$gt": self.start_time},
+                "event.user_id": int(student_id),
+            }).count(),
+            1
+        )
+
     def test_enrollment_upgrade(self):
         # Create a user, log them in, and enroll them in the honor mode
-        AutoAuthPage(self.browser, course_id=self.course_id).visit()
+        student_id = AutoAuthPage(self.browser, course_id=self.course_id).visit().get_user_id()
 
         # Navigate to the dashboard
         self.dashboard_page.visit()
@@ -319,6 +333,26 @@ class PayAndVerifyTest(UniqueCourseTest):
         # Expect that we're enrolled as verified in the course
         enrollment_mode = self.dashboard_page.get_enrollment_mode(self.course_info["display_name"])
         self.assertEqual(enrollment_mode, 'verified')
+
+        # Expect that one mode_changed enrollment event fired as part of the upgrade
+        self.assertEqual(
+            self.event_collection.find({
+                "name": "edx.course.enrollment.mode_changed",
+                "time": {"$gt": self.start_time},
+                "event.user_id": int(student_id),
+            }).count(),
+            1
+        )
+
+        # Expect that enrollment is not activated
+        self.assertEqual(
+            self.event_collection.find({
+                "name": "edx.course.enrollment.activated",
+                "time": {"$gt": self.start_time},
+                "event.user_id": int(student_id),
+            }).count(),
+            0
+        )
 
 
 class LanguageTest(WebAppTest):
