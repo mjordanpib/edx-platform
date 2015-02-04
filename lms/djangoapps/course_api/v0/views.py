@@ -3,157 +3,44 @@
 import logging
 
 from django.http import Http404
-from rest_framework.exceptions import ParseError
 from rest_framework.generics import RetrieveAPIView, ListAPIView
 from xmodule.modulestore.django import modulestore
 from opaque_keys.edx.keys import CourseKey
 from openedx.core.lib.api.views import PaginatedListAPIViewWithKeyHeaderPermissions, ApiKeyHeaderPermissionMixin
 
-from course_api.courseware_access import get_course, get_course_child, get_course_descriptor
 from course_api.v0 import serializers
+from courseware import courses
 
 
 log = logging.getLogger(__name__)
 
 
-class CourseContentMixin(object):
+class CourseViewMixin(object):
     """
     Mixin for views dealing with course content.
     """
-    default_depth = 0
-    serializer_class = serializers.CourseContentSerializer
     lookup_field = 'course_id'
 
     def get_serializer_context(self):
         """
         Supplies a course_id to the serializer.
         """
-        context = super(CourseContentMixin, self).get_serializer_context()
+        context = super(CourseViewMixin, self).get_serializer_context()
         context['course_id'] = self.kwargs.get('course_id')
         return context
 
-    def depth(self, request):
-        """
-        Depth (number of levels) of content to be retrieved.
-        """
-        try:
-            return int(request.QUERY_PARAMS.get('depth', self.default_depth))
-        except ValueError:
-            raise ParseError
-
-    def get_course_or_404(self, request, course_id):
+    def get_course_or_404(self, request, course_id):    # pylint: disable=unused-argument
         """
         Retrieves the specified course, or raises an Http404 error if it does not exist.
         """
-        depth = self.depth(request)
-        course_descriptor = get_course(course_id, depth=depth)
-
-        if not course_descriptor:
+        try:
+            course_key = CourseKey.from_string(course_id)
+            return courses.get_course(course_key)
+        except ValueError:
             raise Http404
 
-        return course_descriptor
 
-    def fetch_children(self, content_descriptor, depth=0):
-        """
-        Retrieves the children for a given content node down to the specified depth.
-        """
-        if not content_descriptor.has_children:
-            return content_descriptor
-
-        if depth == 0:
-            content_descriptor.children = None
-            return content_descriptor
-
-        content_descriptor.children = [self.fetch_children(child, depth - 1) for child in
-                                       content_descriptor.get_children()]
-        return content_descriptor
-
-
-class CourseContentList(CourseContentMixin, ApiKeyHeaderPermissionMixin, ListAPIView):
-    """
-    **Use Case**
-
-        CourseContentList gets a collection of content for a given
-        course. You can use the **uri** value in
-        the response to get details for that content entity.
-
-        The optional **depth** parameter that allows clients to get child content down to the specified tree level.
-
-    **Example requests**:
-
-        GET /{course_id}/content/
-
-        GET /{course_id}/content/
-
-    **Response Values**
-
-        * category: The type of content.
-
-        * name: The name of the content entity.
-
-        * uri: The URI of the content entity.
-
-        * id: The unique identifier for the course.
-
-        * children: Content entities that this content entity contains.
-    """
-
-    default_depth = 1
-
-    def get_queryset(self):
-        course_id = self.kwargs.get('course_id')
-        request = self.request
-        course_descriptor = self.get_course_or_404(request, course_id)
-        depth = self.depth(request)
-        content = [self.fetch_children(child, depth - 1) for child in course_descriptor.get_children()]
-        return content
-
-
-class CourseContentDetail(CourseContentMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView):
-    """
-    **Use Case**
-
-        CourseContentDetail returns a JSON collection for a specified
-        CourseContent entity. If the specified CourseContent is the Course, the
-        course representation is returned. You can use the uri values in the
-        children collection in the JSON response to get details for that content
-        entity.
-
-        The optional **depth** parameter that allows clients to get child content down to the specified tree level.
-
-    **Example Request**
-
-          GET /{course_id}/content/{content_id}/
-
-    **Response Values**
-
-        * category: The type of content.
-
-        * name: The name of the content entity.
-
-        * uri: The URI of the content entity.
-
-        * id: The unique identifier for the course.
-
-        * children: Content entities that this content entity contains.
-    """
-
-    def get_object(self, queryset=None):
-        course_id = self.kwargs.get('course_id')
-        content_id = self.kwargs.get('content_id')
-        request = self.request
-
-        course_descriptor = self.get_course_or_404(request, course_id)
-        course_key = course_descriptor.id
-        depth = self.depth(request)
-
-        content_descriptor, _content_key, _content = get_course_child(request, request.user, course_key, content_id)
-        content = self.fetch_children(content_descriptor, depth)
-
-        return content
-
-
-class CourseList(CourseContentMixin, PaginatedListAPIViewWithKeyHeaderPermissions):
+class CourseList(CourseViewMixin, PaginatedListAPIViewWithKeyHeaderPermissions):
     """
     **Use Case**
 
@@ -191,12 +78,12 @@ class CourseList(CourseContentMixin, PaginatedListAPIViewWithKeyHeaderPermission
             course_ids = course_ids.split(',')
             for course_id in course_ids:
                 course_key = CourseKey.from_string(course_id)
-                course_descriptor = get_course_descriptor(course_key, 0)
+                course_descriptor = courses.get_course(course_key)
                 course_descriptors.append(course_descriptor)
         else:
             course_descriptors = modulestore().get_courses()
 
-        results = [self.fetch_children(descriptor) for descriptor in course_descriptors]
+        results = course_descriptors
 
         # Sort the results in a predictable manner.
         results.sort(key=lambda x: x.id)
@@ -204,7 +91,7 @@ class CourseList(CourseContentMixin, PaginatedListAPIViewWithKeyHeaderPermission
         return results
 
 
-class CourseDetail(CourseContentMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView):
+class CourseDetail(CourseViewMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView):
     """
     **Use Case**
 
@@ -245,12 +132,10 @@ class CourseDetail(CourseContentMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIV
         course_id = self.kwargs.get('course_id')
         request = self.request
         course_descriptor = self.get_course_or_404(request, course_id)
-        depth = self.depth(request)
-        course_descriptor = self.fetch_children(course_descriptor, depth)
         return course_descriptor
 
 
-class CourseStructure(CourseContentMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView):
+class CourseStructure(CourseViewMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView):
     serializer_class = serializers.CourseStructureSerializer
 
     def get_object(self, queryset=None):
