@@ -108,15 +108,14 @@ $sequence--border-color: #C8C8C8;
         text-align: center;
 
         .icon {
-          line-height: 42px;
-          font-size: 90%;
+          line-height: 42px; // This matches the height of the <a> it's within (the parent) to get vertical centering.
+          font-size: 90%;  // The icons at 100% are just a tad too big.
           color: rgb(80, 80, 80);
         }
 
         &.inactive {
 
           .icon {
-            // color: rgb(160, 160, 160); # Lighter gray, but not sure why?
             color: rgb(80, 80, 80);
           }
         }
@@ -150,7 +149,7 @@ $sequence--border-color: #C8C8C8;
         &.seq_video {
 
           .icon:before {
-            content: "\f03d";
+            content: "\f03d"; // .fa-video-camera
           }
         }
 
@@ -158,7 +157,7 @@ $sequence--border-color: #C8C8C8;
         &.seq_other {
 
           .icon:before {
-            content: "\f016";
+            content: "\f016"; // .fa-file-o
           }
         }
 
@@ -166,7 +165,7 @@ $sequence--border-color: #C8C8C8;
         &.seq_vertical, &.seq_problem {
 
           .icon:before {
-            content: "\f022";
+            content: "\f022";  // .fa-list-alt
           }
 
           &.progress-none {

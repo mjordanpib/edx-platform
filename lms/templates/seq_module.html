@@ -11,15 +11,14 @@
         ## implementation note: will need to figure out how to handle combining detail
         ## statuses of multiple modules in js.
         <li>
-        <a class="seq_${item['type']} inactive progress-${item['progress_status']}"
-           data-id="${item['id']}"
-           data-element="${idx+1}"
+        <a id="tab_${idx}"
+           class="seq_${item['type']} inactive progress-${item['progress_status']}"
            href="javascript:void(0);"
            title="${item['title']|h}"
+           data-id="${item['id']}"
+           data-element="${idx+1}"
            data-page-title="${item['page_title']|h}"
-           aria-controls="seq_contents_${idx}"
-           id="tab_${idx}"
-           tabindex="0">
+           aria-controls="seq_contents_${idx}">
             <i class="icon fa seq_${item['type']}"></i>
             <p><span class="sr">${item['type']}</span> ${item['title']}</p>
           </a>
@@ -29,6 +28,8 @@
     </nav>
     <button class="sequence-nav-button button-next">${_('Next')}</button>
   </div>
+
+  <div id="sr-is-focusable" tabindex="-1"></div>
 
   % for idx, item in enumerate(items):
   <div id="seq_contents_${idx}"

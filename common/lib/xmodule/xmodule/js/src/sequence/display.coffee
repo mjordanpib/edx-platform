@@ -114,10 +114,11 @@ class @Sequence
       @updatePageTitle()
 
       sequence_links = @content_container.find('a.seqnav')
+      # sequence_links = @content_container.find('a')
       sequence_links.click @goto
 
       @sr_container.focus();
-    @$("a.active").blur()
+      # @$("a.active").blur()
 
   goto: (event) =>
     event.preventDefault()
@@ -137,7 +138,7 @@ class @Sequence
 
       @render new_position
     else
-      alert_template = gettext("Sequence error! Cannot navigate to tab %(tab_name)s in the current SequenceModule. Please contact the course staff.")
+      alert_template = gettext("Sequence error! Cannot navigate to %(tab_name)s in the current SequenceModule. Please contact the course staff.")
       alert_text = interpolate(alert_template, {tab_name: new_position}, true)
       alert alert_text
 
@@ -175,13 +176,8 @@ class @Sequence
     .addClass("visited")
 
   mark_active: (position) ->
-    # Mark the correct tab as selected, for a11y helpfulness.
-    @$('#sequence-list [role="tab"]').attr({
-        'aria-selected' : null
-        });
     # Don't overwrite class attribute to avoid changing Progress class
     element = @link_for(position)
     element.removeClass("inactive")
     .removeClass("visited")
     .addClass("active")
-    .attr({"aria-selected": "true", 'tabindex': '0'})
