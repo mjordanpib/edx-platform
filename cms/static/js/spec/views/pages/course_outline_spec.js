@@ -1,7 +1,7 @@
-define(["jquery", "js/common_helpers/ajax_helpers", "js/views/utils/view_utils", "js/views/pages/course_outline",
+define(["jquery", "sinon", "js/common_helpers/ajax_helpers", "js/views/utils/view_utils", "js/views/pages/course_outline",
         "js/models/xblock_outline_info", "js/utils/date_utils", "js/spec_helpers/edit_helpers",
         "js/common_helpers/template_helpers"],
-    function($, AjaxHelpers, ViewUtils, CourseOutlinePage, XBlockOutlineInfo, DateUtils, EditHelpers, TemplateHelpers) {
+    function($, Sinon, AjaxHelpers, ViewUtils, CourseOutlinePage, XBlockOutlineInfo, DateUtils, EditHelpers, TemplateHelpers) {
 
         describe("CourseOutlinePage", function() {
             var createCourseOutlinePage, displayNameInput, model, outlinePage, requests,
@@ -90,16 +90,16 @@ define(["jquery", "js/common_helpers/ajax_helpers", "js/views/utils/view_utils",
 
             createMockIndexJSON = function(option) {
                 if(option){
-                    return {
-                        status: 200,
-                        responseText: ''
-                    };
+                    return JSON.stringify({
+                        "developer_message" : "Course has been successfully reindexed.",
+                        "user_message": "Course has been successfully reindexed."
+                    });
                 }
                 else {
-                    return {
-                        status: 500,
-                        responseText: JSON.stringify('Could not index item: course/slashes:mock+item')
-                    };
+                    return JSON.stringify({
+                        "developer_message" : "Could not reindex course.",
+                        "user_message": "Could not reindex course."
+                    });
                 }
             };
 
@@ -329,9 +329,10 @@ define(["jquery", "js/common_helpers/ajax_helpers", "js/views/utils/view_utils",
                     var reindexSpy = spyOn(outlinePage, 'startReIndex').andCallThrough();
                     var successSpy = spyOn(outlinePage, 'onIndexSuccess').andCallThrough();
                     var reindexButton = outlinePage.$('.button.button-reindex');
+                    var fakeserver = Sinon.fakeServer.create();
+                    fakeserver.respondWith('GET', '/course/5/search_reindex', [200, {}, createMockIndexJSON(true)]);
                     reindexButton.trigger('click');
-                    AjaxHelpers.expectJsonRequest(requests, 'GET', '/course_search_index/5');
-                    AjaxHelpers.respondWithJson(requests, createMockIndexJSON(true));
+                    fakeserver.respond();
                     expect(reindexSpy).toHaveBeenCalled();
                     expect(successSpy).toHaveBeenCalled();
                 });
@@ -339,11 +340,14 @@ define(["jquery", "js/common_helpers/ajax_helpers", "js/views/utils/view_utils",
                 it('can start reindex of a course - respond fail', function() {
                     createCourseOutlinePage(this, mockSingleSectionCourseJSON);
                     var reindexSpy = spyOn(outlinePage, 'startReIndex').andCallThrough();
+                    var errorSpy = spyOn(outlinePage, 'onIndexError').andCallThrough();
                     var reindexButton = outlinePage.$('.button.button-reindex');
+                    var fakeserver = Sinon.fakeServer.create();
+                    fakeserver.respondWith('GET', '/course/5/search_reindex', [500, {}, createMockIndexJSON(false)]);
                     reindexButton.trigger('click');
-                    AjaxHelpers.expectJsonRequest(requests, 'GET', '/course_search_index/5');
-                    AjaxHelpers.respondWithJson(requests, createMockIndexJSON(false));
+                    fakeserver.respond();
                     expect(reindexSpy).toHaveBeenCalled();
+                    expect(errorSpy).toHaveBeenCalled();
                 });
             });
 

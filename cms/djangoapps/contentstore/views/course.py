@@ -302,18 +302,27 @@ def course_search_index_handler(request, course_key_string):
     The restful handler for course indexing.
     GET
         html: return status of indexing task
+        json: return status of indexing task
     """
     # Only global staff (PMs) are able to index courses
     if not GlobalStaff().has_user(request.user):
         raise PermissionDenied()
     course_key = CourseKey.from_string(course_key_string)
+    content_type = request.META.get('CONTENT_TYPE', None)
+    if content_type is None:
+        content_type = "application/json; charset=utf-8"
     with modulestore().bulk_operations(course_key):
         try:
             reindex_course_and_check_access(course_key, request.user)
         except SearchIndexingError as search_err:
-            return HttpResponse(search_err.error_list, status=500)
-
-        return HttpResponse({}, status=200)
+            return HttpResponse(json.dumps({
+                "developer_message": search_err.error_list,
+                "user_message": search_err.error_list
+            }), content_type=content_type, status=500)
+        return HttpResponse(json.dumps({
+            "developer_message": _("Course has been successfully reindexed."),
+            "user_message": _("Course has been successfully reindexed.")
+        }), content_type=content_type, status=200)
 
 
 def _course_outline_json(request, course_module):

@@ -25,6 +25,7 @@ from student.tests.factories import UserFactory
 from course_action_state.managers import CourseRerunUIStateManager
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.utils.translation import ugettext as _
 from search.api import perform_search
 import pytz
 
@@ -347,6 +348,8 @@ class TestCourseReIndex(CourseTestCase):
 
     TEST_INDEX_FILENAME = "test_root/index_file.dat"
 
+    SUCCESSFULL_RESPONSE = _("Course has been successfully reindexed.")
+
     def setUp(self):
         """
         Set up the for the course outline tests.
@@ -388,7 +391,7 @@ class TestCourseReIndex(CourseTestCase):
         response = self.client.get(index_url, {}, HTTP_ACCEPT='application/json')
 
         # A course with the default release date should display as "Unscheduled"
-        self.assertEqual(response.content, '')
+        self.assertIn(self.SUCCESSFULL_RESPONSE, response.content)
         self.assertEqual(response.status_code, 200)
 
         response = self.client.post(index_url, {}, HTTP_ACCEPT='application/json')
@@ -465,7 +468,7 @@ class TestCourseReIndex(CourseTestCase):
     @mock.patch('xmodule.html_module.HtmlDescriptor.index_dictionary')
     def test_reindex_html_error_json_responses(self, mock_index_dictionary):
         """
-        Test json response with rmocked error data for html
+        Test json response with mocked error data for html
         """
         # Check results not indexed
         response = perform_search(
@@ -487,7 +490,7 @@ class TestCourseReIndex(CourseTestCase):
     @mock.patch('xmodule.seq_module.SequenceDescriptor.index_dictionary')
     def test_reindex_seq_error_json_responses(self, mock_index_dictionary):
         """
-        Test json response with rmocked error data for sequence
+        Test json response with mocked error data for sequence
         """
         # Check results not indexed
         response = perform_search(
