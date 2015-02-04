@@ -3,25 +3,28 @@ Run these tests @ Devstack:
     paver test_system -s lms --fasttest --verbose --test_id=lms/djangoapps/course_api
 """
 # pylint: disable=missing-docstring,invalid-name,maybe-no-member
+
 from datetime import datetime
 
-import uuid
 from django.core.urlresolvers import reverse
 from django.test.utils import override_settings
+from oauth2_provider.tests.factories import AccessTokenFactory, ClientFactory
 from opaque_keys.edx.locations import BlockUsageLocator
 from xmodule.modulestore.tests.django_utils import TEST_DATA_MOCK_MODULESTORE, ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import CourseFactory, ItemFactory
+from student.tests.factories import UserFactory
 
 
 TEST_SERVER_HOST = 'http://testserver'
-TEST_API_KEY = str(uuid.uuid4())
-
-HEADERS = {
-    'HTTP_X_EDX_API_KEY': TEST_API_KEY,
-}
 
 
-class CourseViewTestsMixin(object):
+class AuthMixin(object):
+    def create_user_and_access_token(self):
+        self.user = UserFactory.create()
+        self.access_token = AccessTokenFactory.create(user=self.user, client=ClientFactory.create()).token
+
+
+class CourseViewTestsMixin(AuthMixin):
     """
     Mixin for course view tests.
     """
@@ -30,6 +33,7 @@ class CourseViewTestsMixin(object):
     def setUp(self):
         super(CourseViewTestsMixin, self).setUp()
         self.create_test_data()
+        self.create_user_and_access_token()
 
     # pylint: disable=attribute-defined-outside-init
     def create_test_data(self):
@@ -98,10 +102,22 @@ class CourseViewTestsMixin(object):
         uri = self.build_absolute_url(reverse('course_api_v0:detail', kwargs={'course_id': unicode(course_key)}))
         self.assertEqual(data['uri'], uri)
 
-    def http_get(self, uri):
+    def http_get(self, uri, **headers):
         """Submit an HTTP GET request"""
-        response = self.client.get(uri, content_type='application/json', follow=True, **HEADERS)
+
+        default_headers = {
+            'HTTP_AUTHORIZATION': 'Bearer ' + self.access_token
+        }
+        default_headers.update(headers)
+
+        response = self.client.get(uri, content_type='application/json', follow=True, **default_headers)
         return response
+
+    def test_unauthorized(self):
+        """
+        Verify that access is denied to un-authenticated users.
+        """
+        raise NotImplementedError
 
 
 class CourseDetailMixin(object):
@@ -126,9 +142,20 @@ class CourseDetailMixin(object):
         # Return the response so child classes do not have to repeat the request.
         return response
 
+    def test_unauthorized(self):
+        """
+        Verify that access is denied to un-authenticated users.
+        """
+        # If debug mode is enabled, the view should return data even if the user is not authenticated.
+        with override_settings(DEBUG=True):
+            response = self.http_get(reverse(self.view, kwargs={'course_id': self.COURSE_ID}), HTTP_AUTHORIZATION=None)
+            self.assertEqual(response.status_code, 200)
+
+        response = self.http_get(reverse(self.view, kwargs={'course_id': self.COURSE_ID}), HTTP_AUTHORIZATION=None)
+        self.assertEqual(response.status_code, 403)
+
 
 @override_settings(MODULESTORE=TEST_DATA_MOCK_MODULESTORE)
-@override_settings(EDX_API_KEY=TEST_API_KEY)
 class CourseListTests(CourseViewTestsMixin, ModuleStoreTestCase):
     view = 'course_api_v0:list'
 
@@ -183,7 +210,7 @@ class CourseListTests(CourseViewTestsMixin, ModuleStoreTestCase):
             self.assertEqual(response.status_code, 200)
 
         response = self.http_get(reverse(self.view), HTTP_AUTHORIZATION=None)
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 403)
 
 
 @override_settings(MODULESTORE=TEST_DATA_MOCK_MODULESTORE)
@@ -233,11 +260,11 @@ class CourseStructureTests(CourseDetailMixin, CourseViewTestsMixin, ModuleStoreT
             u'blocks': blocks
         }
 
+        self.maxDiff = None
         self.assertDictEqual(response.data, expected)
 
 
 @override_settings(MODULESTORE=TEST_DATA_MOCK_MODULESTORE)
-@override_settings(EDX_API_KEY=TEST_API_KEY)
 class CourseGradingPolicyTests(CourseDetailMixin, CourseViewTestsMixin, ModuleStoreTestCase):
     view = 'course_api_v0:grading_policy'
 

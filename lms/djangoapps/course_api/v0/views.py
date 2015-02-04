@@ -3,16 +3,23 @@
 import logging
 
 from django.http import Http404
+from rest_framework.authentication import OAuth2Authentication, SessionAuthentication
 from rest_framework.generics import RetrieveAPIView, ListAPIView
 from xmodule.modulestore.django import modulestore
 from opaque_keys.edx.keys import CourseKey
-from openedx.core.lib.api.views import PaginatedListAPIViewWithKeyHeaderPermissions, ApiKeyHeaderPermissionMixin
+from openedx.core.lib.api.permissions import IsAuthenticatedOrDebug
+from openedx.core.lib.api.serializers import PaginationSerializer
 
-from course_api.v0 import serializers
 from courseware import courses
+from course_api.v0 import serializers
 
 
 log = logging.getLogger(__name__)
+
+
+class AuthMixin(object):
+    authentication_classes = (SessionAuthentication, OAuth2Authentication,)
+    permission_classes = (IsAuthenticatedOrDebug,)
 
 
 class CourseViewMixin(object):
@@ -29,7 +36,7 @@ class CourseViewMixin(object):
         context['course_id'] = self.kwargs.get('course_id')
         return context
 
-    def get_course_or_404(self, request, course_id):    # pylint: disable=unused-argument
+    def get_course_or_404(self, request, course_id):  # pylint: disable=unused-argument
         """
         Retrieves the specified course, or raises an Http404 error if it does not exist.
         """
@@ -40,7 +47,7 @@ class CourseViewMixin(object):
             raise Http404
 
 
-class CourseList(CourseViewMixin, PaginatedListAPIViewWithKeyHeaderPermissions):
+class CourseList(CourseViewMixin, AuthMixin, ListAPIView):
     """
     **Use Case**
 
@@ -68,6 +75,9 @@ class CourseList(CourseViewMixin, PaginatedListAPIViewWithKeyHeaderPermissions):
 
         * id: The unique identifier for the course.
     """
+    paginate_by = 10
+    paginate_by_param = 'page_size'
+    pagination_serializer_class = PaginationSerializer
     serializer_class = serializers.CourseSerializer
 
     def get_queryset(self):
@@ -91,7 +101,7 @@ class CourseList(CourseViewMixin, PaginatedListAPIViewWithKeyHeaderPermissions):
         return results
 
 
-class CourseDetail(CourseViewMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView):
+class CourseDetail(CourseViewMixin, AuthMixin, RetrieveAPIView):
     """
     **Use Case**
 
@@ -135,7 +145,7 @@ class CourseDetail(CourseViewMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView
         return course_descriptor
 
 
-class CourseStructure(CourseViewMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIView):
+class CourseStructure(CourseViewMixin, AuthMixin, RetrieveAPIView):
     serializer_class = serializers.CourseStructureSerializer
 
     def get_object(self, queryset=None):
@@ -150,7 +160,7 @@ class CourseStructure(CourseViewMixin, ApiKeyHeaderPermissionMixin, RetrieveAPIV
         return _modulestore.get_course_structure(course_key)
 
 
-class CourseGradingPolicy(ApiKeyHeaderPermissionMixin, ListAPIView):
+class CourseGradingPolicy(AuthMixin, ListAPIView):
     """
     **Use Case**
 
