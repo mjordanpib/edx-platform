@@ -16,7 +16,8 @@ from ..helpers import (
     load_data_str,
     generate_course_key,
     select_option_by_value,
-    element_has_text
+    element_has_text,
+    assert_event_emitted_num_times
 )
 from ...pages.lms.auto_auth import AutoAuthPage
 from ...pages.lms.create_mode import ModeCreationPage
@@ -295,14 +296,12 @@ class PayAndVerifyTest(UniqueCourseTest):
         self.assertEqual(enrollment_mode, 'verified')
 
         # Expect enrollment activated event
-        self.assertEqual(
-            self.event_collection.find({
-                "name": "edx.course.enrollment.activated",
-                "time": {"$gt": self.start_time},
-                "event.user_id": int(student_id),
-            }).count(),
-            1
-        )
+        assert_event_emitted_num_times(
+            self.event_collection,
+            "edx.course.enrollment.activated",
+            self.start_time,
+            student_id,
+            1)
 
     def test_enrollment_upgrade(self):
         # Create a user, log them in, and enroll them in the honor mode
@@ -335,22 +334,20 @@ class PayAndVerifyTest(UniqueCourseTest):
         self.assertEqual(enrollment_mode, 'verified')
 
         # Expect that one mode_changed enrollment event fired as part of the upgrade
-        self.assertEqual(
-            self.event_collection.find({
-                "name": "edx.course.enrollment.mode_changed",
-                "time": {"$gt": self.start_time},
-                "event.user_id": int(student_id),
-            }).count(),
+        assert_event_emitted_num_times(
+            self.event_collection,
+            "edx.course.enrollment.mode_changed",
+            self.start_time,
+            student_id,
             1
         )
 
-        # Expect that enrollment is not activated
-        self.assertEqual(
-            self.event_collection.find({
-                "name": "edx.course.enrollment.activated",
-                "time": {"$gt": self.start_time},
-                "event.user_id": int(student_id),
-            }).count(),
+        # Expect no enrollment activated event
+        assert_event_emitted_num_times(
+            self.event_collection,
+            "edx.course.enrollment.activated",
+            self.start_time,
+            student_id,
             0
         )
 
