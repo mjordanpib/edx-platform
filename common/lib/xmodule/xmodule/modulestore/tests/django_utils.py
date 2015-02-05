@@ -24,7 +24,7 @@ from xmodule.modulestore.tests.factories import XMODULE_FACTORY_LOCK
 from xmodule.tabs import CoursewareTab, CourseInfoTab, StaticTab, DiscussionTab, ProgressTab, WikiTab
 
 
-def mixed_store_config(data_dir, mappings, include_xml=False, xml_course_dirs=None):
+def mixed_store_config(data_dir, mappings, include_xml=False, xml_course_dirs=None, split_default=False):
     """
     Return a `MixedModuleStore` configuration, which provides
     access to both Mongo- and XML-backed courses.
@@ -45,6 +45,8 @@ def mixed_store_config(data_dir, mappings, include_xml=False, xml_course_dirs=No
 
         include_xml (boolean): If True, include an XML modulestore in the configuration.
         xml_course_dirs (list): The directories containing XML courses to load from disk.
+        split_default (boolean): If True, split will be the default modulestore. The default value is false,
+            meaning that old mongo is the default modulestore.
 
         note: For the courses to be loaded into the XML modulestore and accessible do the following:
             * include_xml should be True
@@ -53,10 +55,16 @@ def mixed_store_config(data_dir, mappings, include_xml=False, xml_course_dirs=No
             * mappings should be configured, pointing the xml courses to the xml modulestore
 
     """
-    stores = [
-        draft_mongo_store_config(data_dir)['default'],
-        split_mongo_store_config(data_dir)['default']
-    ]
+    if not split_default:
+        stores = [
+            draft_mongo_store_config(data_dir)['default'],
+            split_mongo_store_config(data_dir)['default']
+        ]
+    else:
+        stores = [
+            split_mongo_store_config(data_dir)['default'],
+            draft_mongo_store_config(data_dir)['default']
+        ]
 
     if include_xml:
         stores.append(xml_store_config(data_dir, course_dirs=xml_course_dirs)['default'])
@@ -174,8 +182,13 @@ TEST_DATA_MIXED_GRADED_MODULESTORE = mixed_store_config(
 
 # All store requests now go through mixed
 # Use this modulestore if you specifically want to test mongo and not a mocked modulestore.
-# This modulestore definition below will not load any xml courses.
+# This modulestore definition below will not load any xml courses. Note that "old mongo" is currently the default
+# modulestore in this configuration.
 TEST_DATA_MONGO_MODULESTORE = mixed_store_config(mkdtemp(), {}, include_xml=False)
+
+# This is the mixed modulestore, with split as the default instead of old mongo.
+# This modulestore definition below will not load any xml courses.
+TEST_DATA_MONGO_MODULESTORE_SPLIT_DEFAULT = mixed_store_config(mkdtemp(), {}, include_xml=False, split_default=True)
 
 # Unit tests that are not specifically testing the modulestore implementation but just need course context can use a mocked modulestore.
 # Use this modulestore if you do not care about the underlying implementation.
