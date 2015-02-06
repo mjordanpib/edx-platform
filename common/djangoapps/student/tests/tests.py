@@ -28,13 +28,13 @@ from student.views import (process_survey_link, _cert_info,
 from student.tests.factories import UserFactory, CourseModeFactory
 from xmodule.modulestore.tests.factories import CourseFactory
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
-from xmodule.modulestore.tests.django_utils import TEST_DATA_MOCK_MODULESTORE
 
 # These imports refer to lms djangoapps.
 # Their testcases are only run under lms.
 from bulk_email.models import Optout  # pylint: disable=import-error
 from certificates.models import CertificateStatuses  # pylint: disable=import-error
 from certificates.tests.factories import GeneratedCertificateFactory  # pylint: disable=import-error
+from verify_student.models import SoftwareSecurePhotoVerification
 import shoppingcart  # pylint: disable=import-error
 
 
@@ -179,7 +179,6 @@ class CourseEndingTest(TestCase):
         self.assertIsNone(_cert_info(user, course2, cert_status))
 
 
-@override_settings(MODULESTORE=TEST_DATA_MOCK_MODULESTORE)
 class DashboardTest(ModuleStoreTestCase):
     """
     Tests for dashboard utility functions
@@ -192,11 +191,20 @@ class DashboardTest(ModuleStoreTestCase):
         self.client = Client()
 
     @unittest.skipUnless(settings.ROOT_URLCONF == 'lms.urls', 'Test only valid in lms')
-    def check_verification_status_on(self, mode, value):
+    def _check_verification_status_on(self, mode, value):
         """
         Check that the css class and the status message are in the dashboard html.
         """
+        CourseModeFactory(mode_slug=mode, course_id=self.course.id)
         CourseEnrollment.enroll(self.user, self.course.location.course_key, mode=mode)
+
+        if mode == 'verified':
+            # Simulate a successful verification attempt
+            attempt = SoftwareSecurePhotoVerification.objects.create(user=self.user)
+            attempt.mark_ready()
+            attempt.submit()
+            attempt.approve()
+
         response = self.client.get(reverse('dashboard'))
         self.assertContains(response, "class=\"course {0}\"".format(mode))
         self.assertContains(response, value)
@@ -207,16 +215,25 @@ class DashboardTest(ModuleStoreTestCase):
         Test that the certificate verification status for courses is visible on the dashboard.
         """
         self.client.login(username="jack", password="test")
-        self.check_verification_status_on('verified', 'You\'re enrolled as a verified student')
-        self.check_verification_status_on('honor', 'You\'re enrolled as an honor code student')
-        self.check_verification_status_on('audit', 'You\'re auditing this course')
+        self._check_verification_status_on('verified', 'You\'re enrolled as a verified student')
+        self._check_verification_status_on('honor', 'You\'re enrolled as an honor code student')
+        self._check_verification_status_on('audit', 'You\'re auditing this course')
 
     @unittest.skipUnless(settings.ROOT_URLCONF == 'lms.urls', 'Test only valid in lms')
-    def check_verification_status_off(self, mode, value):
+    def _check_verification_status_off(self, mode, value):
         """
         Check that the css class and the status message are not in the dashboard html.
         """
+        CourseModeFactory(mode_slug=mode, course_id=self.course.id)
         CourseEnrollment.enroll(self.user, self.course.location.course_key, mode=mode)
+
+        if mode == 'verified':
+            # Simulate a successful verification attempt
+            attempt = SoftwareSecurePhotoVerification.objects.create(user=self.user)
+            attempt.mark_ready()
+            attempt.submit()
+            attempt.approve()
+
         response = self.client.get(reverse('dashboard'))
         self.assertNotContains(response, "class=\"course {0}\"".format(mode))
         self.assertNotContains(response, value)
@@ -228,9 +245,9 @@ class DashboardTest(ModuleStoreTestCase):
         if the verified certificates setting is off.
         """
         self.client.login(username="jack", password="test")
-        self.check_verification_status_off('verified', 'You\'re enrolled as a verified student')
-        self.check_verification_status_off('honor', 'You\'re enrolled as an honor code student')
-        self.check_verification_status_off('audit', 'You\'re auditing this course')
+        self._check_verification_status_off('verified', 'You\'re enrolled as a verified student')
+        self._check_verification_status_off('honor', 'You\'re enrolled as an honor code student')
+        self._check_verification_status_off('audit', 'You\'re auditing this course')
 
     def test_course_mode_info(self):
         verified_mode = CourseModeFactory.create(
@@ -280,8 +297,14 @@ class DashboardTest(ModuleStoreTestCase):
             recipient_name='Testw_1', recipient_email='test2@test.com', internal_reference="A",
             course_id=self.course.id, is_valid=False
         )
+        invoice_item = shoppingcart.models.CourseRegistrationCodeInvoiceItem.objects.create(
+            invoice=sale_invoice_1,
+            qty=1,
+            unit_price=1234.32,
+            course_id=self.course.id
+        )
         course_reg_code = shoppingcart.models.CourseRegistrationCode(
-            code="abcde", course_id=self.course.id, created_by=self.user, invoice=sale_invoice_1, mode_slug='honor'
+            code="abcde", course_id=self.course.id, created_by=self.user, invoice=sale_invoice_1, invoice_item=invoice_item, mode_slug='honor'
         )
         course_reg_code.save()
 
@@ -590,7 +613,6 @@ class EnrollInCourseTest(TestCase):
         self.assert_enrollment_mode_change_event_was_emitted(user, course_id, "honor")
 
 
-@override_settings(MODULESTORE=TEST_DATA_MOCK_MODULESTORE)
 @unittest.skipUnless(settings.ROOT_URLCONF == 'lms.urls', 'Test only valid in lms')
 class ChangeEnrollmentViewTest(ModuleStoreTestCase):
     """Tests the student.views.change_enrollment view"""
@@ -673,7 +695,6 @@ class ChangeEnrollmentViewTest(ModuleStoreTestCase):
         self.assertEqual(enrollment_mode, u'honor')
 
 
-@override_settings(MODULESTORE=TEST_DATA_MOCK_MODULESTORE)
 class PaidRegistrationTest(ModuleStoreTestCase):
     """
     Tests for paid registration functionality (not verified student), involves shoppingcart
@@ -706,7 +727,6 @@ class PaidRegistrationTest(ModuleStoreTestCase):
             shoppingcart.models.Order.get_cart_for_user(self.user), self.course.id))
 
 
-@override_settings(MODULESTORE=TEST_DATA_MOCK_MODULESTORE)
 class AnonymousLookupTable(ModuleStoreTestCase):
     """
     Tests for anonymous_id_functions

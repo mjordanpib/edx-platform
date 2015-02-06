@@ -24,7 +24,6 @@ from opaque_keys.edx.locations import SlashSeparatedCourseKey
 from opaque_keys.edx.locator import CourseLocator
 from opaque_keys import InvalidKeyError
 from courseware.courses import get_course_by_id
-from courseware.views import registered_for_course
 from config_models.decorators import require_config
 from shoppingcart.reports import RefundReport, ItemizedPurchaseReport, UniversityRevenueShareReport, CertificateStatusReport
 from student.models import CourseEnrollment, EnrollmentClosedError, CourseFullError, \
@@ -82,7 +81,7 @@ def add_course_to_cart(request, course_id):
 
     assert isinstance(course_id, basestring)
     if not request.user.is_authenticated():
-        log.info("Anon user trying to add course {} to cart".format(course_id))
+        log.info(u"Anon user trying to add course %s to cart", course_id)
         return HttpResponseForbidden(_('You must be logged-in to add to a shopping cart'))
     cart = Order.get_cart_for_user(request.user)
     course_key = SlashSeparatedCourseKey.from_deprecated_string(course_id)
@@ -92,10 +91,10 @@ def add_course_to_cart(request, course_id):
     except CourseDoesNotExistException:
         return HttpResponseNotFound(_('The course you requested does not exist.'))
     except ItemAlreadyInCartException:
-        return HttpResponseBadRequest(_('The course {course_id} is already in your cart.'.format(course_id=course_id)))
+        return HttpResponseBadRequest(_('The course {course_id} is already in your cart.').format(course_id=course_id))
     except AlreadyEnrolledInCourseException:
         return HttpResponseBadRequest(
-            _('You are already registered in course {course_id}.'.format(course_id=course_id)))
+            _('You are already registered in course {course_id}.').format(course_id=course_id))
     else:
         # in case a coupon redemption code has been applied, new items should also get a discount if applicable.
         order = paid_course_item.order
@@ -132,7 +131,7 @@ def update_user_cart(request):
         try:
             item = OrderItem.objects.get(id=item_id, status='cart')
         except OrderItem.DoesNotExist:
-            log.exception('Cart OrderItem id={item_id} DoesNotExist'.format(item_id=item_id))
+            log.exception(u'Cart OrderItem id=%s DoesNotExist', item_id)
             return HttpResponseNotFound('Order item does not exist.')
 
         item.qty = qty
@@ -201,8 +200,11 @@ def clear_cart(request):
     coupon_redemption = CouponRedemption.objects.filter(user=request.user, order=cart.id)
     if coupon_redemption:
         coupon_redemption.delete()
-        log.info('Coupon redemption entry removed for user {user} for order {order_id}'.format(user=request.user,
-                                                                                               order_id=cart.id))
+        log.info(
+            u'Coupon redemption entry removed for user %s for order %s',
+            request.user,
+            cart.id,
+        )
 
     return HttpResponse('Cleared')
 
@@ -218,14 +220,20 @@ def remove_item(request):
     items = OrderItem.objects.filter(id=item_id, status='cart').select_subclasses()
 
     if not len(items):
-        log.exception('Cannot remove cart OrderItem id={item_id}. DoesNotExist or item is already purchased'.format(
-            item_id=item_id))
+        log.exception(
+            u'Cannot remove cart OrderItem id=%s. DoesNotExist or item is already purchased',
+            item_id
+        )
     else:
         item = items[0]
         if item.user == request.user:
             order_item_course_id = getattr(item, 'course_id')
             item.delete()
-            log.info('order item {item_id} removed for user {user}'.format(item_id=item_id, user=request.user))
+            log.info(
+                u'order item %s removed for user %s',
+                item_id,
+                request.user,
+            )
             remove_code_redemption(order_item_course_id, item_id, item, request.user)
             item.order.update_order_type()
 
@@ -245,10 +253,14 @@ def remove_code_redemption(order_item_course_id, item_id, item, user):
             order=item.order_id
         )
         coupon_redemption.delete()
-        log.info('Coupon "{code}" redemption entry removed for user "{user}" for order item "{item_id}"'
-                 .format(code=coupon_redemption.coupon.code, user=user, item_id=item_id))
+        log.info(
+            u'Coupon "%s" redemption entry removed for user "%s" for order item "%s"',
+            coupon_redemption.coupon.code,
+            user,
+            item_id,
+        )
     except CouponRedemption.DoesNotExist:
-        log.debug('Code redemption does not exist for order item id={item_id}.'.format(item_id=item_id))
+        log.debug(u'Code redemption does not exist for order item id=%s.', item_id)
 
 
 @login_required
@@ -284,7 +296,7 @@ def use_code(request):
         try:
             course_reg = CourseRegistrationCode.objects.get(code=code)
         except CourseRegistrationCode.DoesNotExist:
-            return HttpResponseNotFound(_("Discount does not exist against code '{code}'.".format(code=code)))
+            return HttpResponseNotFound(_("Discount does not exist against code '{code}'.").format(code=code))
 
         return use_registration_code(course_reg, request.user)
 
@@ -311,7 +323,7 @@ def get_reg_code_validity(registration_code, request, limiter):
             reg_code_already_redeemed = True
 
     if not reg_code_is_valid:
-        #tick the rate limiter counter
+        # tick the rate limiter counter
         AUDIT_LOG.info("Redemption of a non existing RegistrationCode {code}".format(code=registration_code))
         limiter.tick_bad_request_counter(request)
         raise Http404()
@@ -345,7 +357,7 @@ def register_code_redemption(request, registration_code):
             'reg_code': registration_code,
             'site_name': site_name,
             'course': course,
-            'registered_for_course': registered_for_course(course, request.user)
+            'registered_for_course': not _is_enrollment_code_an_update(course, request.user, course_registration)
         }
         return render_to_response(template_to_render, context)
     elif request.method == "POST":
@@ -401,6 +413,29 @@ def register_code_redemption(request, registration_code):
         return render_to_response(template_to_render, context)
 
 
+def _is_enrollment_code_an_update(course, user, redemption_code):
+    """Checks to see if the user's enrollment can be updated by the code.
+
+    Check to see if the enrollment code and the user's enrollment match. If they are different, the code
+    may be used to alter the enrollment of the user. If the enrollment is inactive, will return True, since
+    the user may use the code to re-activate an enrollment as well.
+
+    Enrollment redemption codes must be associated with a paid course mode. If the current enrollment is a
+    different mode then the mode associated with the code, use of the code can be considered an upgrade.
+
+    Args:
+        course (CourseDescriptor): The course to check for enrollment.
+        user (User): The user that will be using the redemption code.
+        redemption_code (CourseRegistrationCode): The redemption code that will be used to update the user's enrollment.
+
+    Returns:
+        True if the redemption code can be used to upgrade the enrollment, or re-activate it.
+
+    """
+    enrollment_mode, is_active = CourseEnrollment.enrollment_mode_for_user(user, course.id)
+    return not is_active or enrollment_mode != redemption_code.mode_slug
+
+
 def use_registration_code(course_reg, user):
     """
     This method utilize course registration code.
@@ -409,19 +444,22 @@ def use_registration_code(course_reg, user):
     and redirects the user to the Registration code redemption page.
     """
     if RegistrationCodeRedemption.is_registration_code_redeemed(course_reg):
-        log.warning("Registration code '{registration_code}' already used".format(registration_code=course_reg.code))
-        return HttpResponseBadRequest(_(
-            "Oops! The code '{registration_code}' you entered is either invalid or expired".format(
-                registration_code=course_reg.code)))
+        log.warning(u"Registration code '%s' already used", course_reg.code)
+        return HttpResponseBadRequest(
+            _("Oops! The code '{registration_code}' you entered is either invalid or expired").format(
+                registration_code=course_reg.code
+            )
+        )
     try:
         cart = Order.get_cart_for_user(user)
         cart_items = cart.find_item_by_course_id(course_reg.course_id)
     except ItemNotFoundInCartException:
-        log.warning("Course item does not exist against registration code '{registration_code}'".format(
-            registration_code=course_reg.code))
-        return HttpResponseNotFound(_(
-            "Code '{registration_code}' is not valid for any course in the shopping cart.".format(
-                registration_code=course_reg.code)))
+        log.warning(u"Course item does not exist against registration code '%s'", course_reg.code)
+        return HttpResponseNotFound(
+            _("Code '{registration_code}' is not valid for any course in the shopping cart.").format(
+                registration_code=course_reg.code
+            )
+        )
     else:
         applicable_cart_items = [
             cart_item for cart_item in cart_items
@@ -455,8 +493,8 @@ def use_coupon_code(coupons, user):
             return HttpResponseBadRequest(_("Only one coupon redemption is allowed against an order"))
 
     if not is_redemption_applied:
-        log.warning("Discount does not exist against code '{code}'.".format(code=coupons[0].code))
-        return HttpResponseNotFound(_("Discount does not exist against code '{code}'.".format(code=coupons[0].code)))
+        log.warning(u"Discount does not exist against code '%s'.", coupons[0].code)
+        return HttpResponseNotFound(_("Discount does not exist against code '{code}'.").format(code=coupons[0].code))
 
     return HttpResponse(
         json.dumps({'response': 'success', 'coupon_code_applied': True}),
@@ -534,10 +572,11 @@ def donate(request):
         # Course ID may be None if this is a donation to the entire organization
         Donation.add_to_order(cart, amount, course_id=course_id)
     except InvalidCartItem as ex:
-        log.exception((
-            u"Could not create donation item for "
-            u"amount '{amount}' and course ID '{course_id}'"
-        ).format(amount=amount, course_id=course_id))
+        log.exception(
+            u"Could not create donation item for amount '%s' and course ID '%s'",
+            amount,
+            course_id
+        )
         return HttpResponseBadRequest(unicode(ex))
 
     # Start the purchase.
@@ -830,28 +869,28 @@ def _show_receipt_html(request, order):
         'reg_code_info_list': reg_code_info_list,
         'order_purchase_date': order.purchase_time.strftime("%B %d, %Y"),
     }
-    # we want to have the ability to override the default receipt page when
-    # there is only one item in the order
+    # We want to have the ability to override the default receipt page when
+    # there is only one item in the order.
     if order_items.count() == 1:
         receipt_template = order_items[0].single_item_receipt_template
         context.update(order_items[0].single_item_receipt_context)
 
-        # TODO (ECOM-188): Once the A/B test of separate verified / payment flow
-        # completes, implement this in a more general way.  For now,
-        # we simply redirect to the new receipt page (in verify_student).
-        if settings.FEATURES.get('SEPARATE_VERIFICATION_FROM_PAYMENT') and request.session.get('separate-verified', False):
-            if receipt_template == 'shoppingcart/verified_cert_receipt.html':
-                url = reverse(
-                    'verify_student_payment_confirmation',
-                    kwargs={'course_id': unicode(order_items[0].course_id)}
-                )
+        # Ideally, the shoppingcart app would own the receipt view. However,
+        # as a result of changes made to the payment and verification flows as
+        # part of an A/B test, the verify_student app owns it instead. This is
+        # left over, and will be made more general in the future.
+        if receipt_template == 'shoppingcart/verified_cert_receipt.html':
+            url = reverse(
+                'verify_student_payment_confirmation',
+                kwargs={'course_id': unicode(order_items[0].course_id)}
+            )
 
-                # Add a query string param for the order ID
-                # This allows the view to query for the receipt information later.
-                url += '?payment-order-num={order_num}'.format(
-                    order_num=order_items[0].order.id
-                )
-                return HttpResponseRedirect(url)
+            # Add a query string param for the order ID
+            # This allows the view to query for the receipt information later.
+            url += '?payment-order-num={order_num}'.format(
+                order_num=order_items[0].order.id
+            )
+            return HttpResponseRedirect(url)
 
     return render_to_response(receipt_template, context)
 
