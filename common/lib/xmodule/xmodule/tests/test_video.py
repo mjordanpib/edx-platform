@@ -65,62 +65,6 @@ def instantiate_descriptor(**field_data):
     )
 
 
-def set_up():
-    """
-    Overrides YOUTUBE and CONTENTSTORE settings
-    """
-    youtube_setting = getattr(settings, "YOUTUBE", None)
-    contentstore_setting = getattr(settings, "CONTENTSTORE", None)
-    settings.YOUTUBE = {
-        # YouTube JavaScript API
-        'API': 'www.youtube.com/iframe_api',
-
-        # URL to test YouTube availability
-        'TEST_URL': 'gdata.youtube.com/feeds/api/videos/',
-
-        # Current youtube api for requesting transcripts.
-        # For example: http://video.google.com/timedtext?lang=en&v=j_jEn79vS3g.
-        'TEXT_API': {
-            'url': 'video.google.com/timedtext',
-            'params': {
-                'lang': 'en',
-                'v': 'set_youtube_id_of_11_symbols_here',
-            },
-        },
-    }
-
-    settings.CONTENTSTORE = {
-        'ENGINE': 'xmodule.contentstore.mongo.MongoContentStore',
-        'DOC_STORE_CONFIG': {
-            'host': 'localhost',
-            'db': 'test_xcontent_%s' % uuid4().hex,
-        },
-        # allow for additional options that can be keyed on a name, e.g. 'trashcan'
-        'ADDITIONAL_OPTIONS': {
-            'trashcan': {
-                'bucket': 'trash_fs'
-            }
-        }
-    }
-
-    return youtube_setting, contentstore_setting
-
-
-def tear_down(youtube_setting, contentstore_setting):
-    """
-    Returns YOUTUBE and CONTENTSTORE settings to a default value
-    """
-    if youtube_setting:
-        settings.YOUTUBE = youtube_setting
-    else:
-        del settings.YOUTUBE
-
-    if contentstore_setting:
-        settings.CONTENTSTORE = contentstore_setting
-    else:
-        del settings.CONTENTSTORE
-
-
 class VideoModuleTest(LogicTest):
     """Logic tests for Video Xmodule."""
     descriptor_class = VideoDescriptor
@@ -670,8 +614,69 @@ class VideoDescriptorIndexingTestCase(unittest.TestCase):
     """
     Make sure that VideoDescriptor can format data for indexing as expected.
     """
-    def test_index_dictionary(self):
-        youtube_setting, contentstore_setting = set_up()
+
+    maxDiff = None
+
+    def setUp(self):
+        """
+        Overrides YOUTUBE and CONTENTSTORE settings
+        """
+        self.youtube_setting = getattr(settings, "YOUTUBE", None)
+        self.contentstore_setting = getattr(settings, "CONTENTSTORE", None)
+        settings.YOUTUBE = {
+            # YouTube JavaScript API
+            'API': 'www.youtube.com/iframe_api',
+
+            # URL to test YouTube availability
+            'TEST_URL': 'gdata.youtube.com/feeds/api/videos/',
+
+            # Current youtube api for requesting transcripts.
+            # For example: http://video.google.com/timedtext?lang=en&v=j_jEn79vS3g.
+            'TEXT_API': {
+                'url': 'video.google.com/timedtext',
+                'params': {
+                    'lang': 'en',
+                    'v': 'set_youtube_id_of_11_symbols_here',
+                },
+            },
+        }
+
+        settings.CONTENTSTORE = {
+            'ENGINE': 'xmodule.contentstore.mongo.MongoContentStore',
+            'DOC_STORE_CONFIG': {
+                'host': 'localhost',
+                'db': 'test_xcontent_%s' % uuid4().hex,
+            },
+            # allow for additional options that can be keyed on a name, e.g. 'trashcan'
+            'ADDITIONAL_OPTIONS': {
+                'trashcan': {
+                    'bucket': 'trash_fs'
+                }
+            }
+        }
+
+    def tearDown(self):
+        """
+        Returns YOUTUBE and CONTENTSTORE settings to a default value
+        """
+        if self.youtube_setting:
+            settings.YOUTUBE = self.youtube_setting
+            self.youtube_setting.dispose()
+            self.youtube_setting = None
+        else:
+            del settings.YOUTUBE
+
+        if self.contentstore_setting:
+            settings.CONTENTSTORE = self.contentstore_setting
+            self.contentstore_setting.dispose()
+            self.contentstore_setting = None
+        else:
+            del settings.CONTENTSTORE
+
+    def test_video_with_no_subs_index_dictionary(self):
+        """
+        Test index dictionary of an video module without subtitles.
+        """
         xml_data = '''
             <video display_name="Test Video"
                    youtube="1.0:p2Q6BrNhdh8,0.75:izygArpw-Qo,1.25:1EeWXzPdhSA,1.5:rABDYkeK0x8"
@@ -691,6 +696,10 @@ class VideoDescriptorIndexingTestCase(unittest.TestCase):
             "content_type": "Video"
         })
 
+    def test_video_with_youtube_subs_index_dictionary(self):
+        """
+        Test index dictionary of an video module with YouTube subtitles.
+        """
         xml_data_sub = '''
             <video display_name="Test Video"
                    youtube="1.0:p2Q6BrNhdh8,0.75:izygArpw-Qo,1.25:1EeWXzPdhSA,1.5:rABDYkeK0x8"
@@ -738,6 +747,11 @@ class VideoDescriptorIndexingTestCase(unittest.TestCase):
             "content_type": "Video"
         })
 
+    def test_video_with_subs_and_transcript_index_dictionary(self):
+        """
+        Test index dictionary of an video module with
+        YouTube subtitles and German transcript uploaded by a user.
+        """
         xml_data_sub_transcript = '''
             <video display_name="Test Video"
                    youtube="1.0:p2Q6BrNhdh8,0.75:izygArpw-Qo,1.25:1EeWXzPdhSA,1.5:rABDYkeK0x8"
@@ -755,6 +769,7 @@ class VideoDescriptorIndexingTestCase(unittest.TestCase):
         '''
 
         descriptor = instantiate_descriptor(data=xml_data_sub_transcript)
+        download_youtube_subs('OEoXaMPEzfM', descriptor, settings)
         save_to_store(SRT_FILEDATA, "subs_grmtran1.srt", 'text/srt', descriptor.location)
         self.assertEqual(descriptor.index_dictionary(), {
             "content": {
@@ -782,11 +797,16 @@ class VideoDescriptorIndexingTestCase(unittest.TestCase):
                     " progress to the next element by pressing the Arrow button, or by clicking on the next tab. Try"
                     " that now. The tutorial will continue in the next video."
                 ),
-                "transcript_ge": "sprechen sie deutsch? Ja, ich spreche Deutsch"
+                "transcript_ge": "sprechen sie deutsch? Ja, ich spreche Deutsch",
             },
             "content_type": "Video"
         })
 
+    def test_video_with_multiple_transcripts_index_dictionary(self):
+        """
+        Test index dictionary of an video module with
+        two transcripts uploaded by a user.
+        """
         xml_data_transcripts = '''
             <video display_name="Test Video"
                    youtube="1.0:p2Q6BrNhdh8,0.75:izygArpw-Qo,1.25:1EeWXzPdhSA,1.5:rABDYkeK0x8"
@@ -814,5 +834,3 @@ class VideoDescriptorIndexingTestCase(unittest.TestCase):
             },
             "content_type": "Video"
         })
-
-        tear_down(youtube_setting, contentstore_setting)
