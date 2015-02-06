@@ -145,17 +145,17 @@ class TestInstructorGradeReport(TestReportMixin, InstructorTaskCourseTestCase):
         _groups = [group.name for group in self.course.user_partitions[0].groups]
         self.assertEqual(_groups, user_groups)
 
-    def test_content_group_partition(self):
+    def test_cohort_scheme_partition(self):
         """
         Test that cohort-schemed user partitions are ignored in the
         grades export.
         """
         # Set up a course with 'cohort' and 'random' user partitions.
-        content_group_partition = UserPartition(
+        cohort_scheme_partition = UserPartition(
             0,
-            'Content Group Configuration',
-            'Group Configuration for Content Groups',
-            [Group(0, 'Content Group A'), Group(1, 'Content Group B')],
+            'Cohort-schemed Group Configuration',
+            'Group Configuration based on Cohorts',
+            [Group(0, 'Group A'), Group(1, 'Group B')],
             scheme_id='cohort'
         )
         experiment_group_a = Group(2, 'Experiment Group A')
@@ -167,7 +167,7 @@ class TestInstructorGradeReport(TestReportMixin, InstructorTaskCourseTestCase):
             [experiment_group_a, experiment_group_b],
             scheme_id='random'
         )
-        course = CourseFactory.create(user_partitions=[content_group_partition, experiment_partition])
+        course = CourseFactory.create(user_partitions=[cohort_scheme_partition, experiment_partition])
 
         # Create user_a and user_b which are enrolled in the course
         # and assigned to experiment_group_a and experiment_group_b,

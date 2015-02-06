@@ -5,7 +5,6 @@ import logging
 import random
 import api.course_tag as course_tag_api
 
-from courseware import courses
 from xmodule.partitions.partitions import UserPartitionError, NoSuchUserPartitionGroupError
 
 log = logging.getLogger(__name__)
