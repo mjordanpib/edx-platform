@@ -1,3 +1,8 @@
+"""
+Tests for cohorts
+"""
+# pylint: disable=no-member
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import IntegrityError
@@ -134,6 +139,14 @@ class TestCohorts(TestCase):
         clear_existing_modulestores()
         self.toy_course_key = SlashSeparatedCourseKey("edX", "toy", "2012_Fall")
 
+    def _create_cohort(self, course_id, cohort_name, assignment_type):
+        """
+        Create a cohort for testing.
+        """
+        cohort = CohortFactory(course_id=course_id, name=cohort_name)
+        CourseCohortFactory(course_user_group=cohort, assignment_type=assignment_type)
+        return cohort
+
     def test_is_course_cohorted(self):
         """
         Make sure cohorts.is_course_cohorted() correctly reports if a course is cohorted or not.
@@ -177,18 +190,12 @@ class TestCohorts(TestCase):
         Make sure that cohorts.set_assignment_type() and cohorts.get_assignment_type() works correctly.
         """
         course = modulestore().get_course(self.toy_course_key)
-        self.assertFalse(course.is_cohorted)
-
-        config_course_cohorts(course, discussions=[], cohorted=True)
 
         # We are creating two random cohorts because we can't change assignment type of
         # random cohort if it is the only random cohort present.
-        cohort1 = CohortFactory(course_id=course.id, name="TestCohort1")
-        CourseCohortFactory(course_user_group=cohort1, assignment_type=CourseCohort.RANDOM)
-        cohort2 = CohortFactory(course_id=course.id, name="TestCohort2")
-        CourseCohortFactory(course_user_group=cohort2, assignment_type=CourseCohort.RANDOM)
-        cohort3 = CohortFactory(course_id=course.id, name="TestCohort3")
-        CourseCohortFactory(course_user_group=cohort3, assignment_type=CourseCohort.MANUAL)
+        cohort1 = self._create_cohort(course.id, "TestCohort1", CourseCohort.RANDOM)
+        self._create_cohort(course.id, "TestCohort2", CourseCohort.RANDOM)
+        cohort3 = self._create_cohort(course.id, "TestCohort3", CourseCohort.MANUAL)
 
         self.assertEqual(cohorts.get_assignment_type(cohort1), CourseCohort.RANDOM)
 
@@ -204,10 +211,7 @@ class TestCohorts(TestCase):
         """
         course = modulestore().get_course(self.toy_course_key)
 
-        config_course_cohorts(course, discussions=[], cohorted=True)
-
-        cohort = CohortFactory(course_id=course.id, name="TestCohort")
-        CourseCohortFactory(course_user_group=cohort, assignment_type=CourseCohort.RANDOM)
+        cohort = self._create_cohort(course.id, "TestCohort", CourseCohort.RANDOM)
 
         self.assertEqual(cohorts.get_assignment_type(cohort), CourseCohort.RANDOM)
 
@@ -280,15 +284,12 @@ class TestCohorts(TestCase):
         """
         Make sure cohorts.get_cohort() does the right thing with auto_cohort_groups.
         If there are auto cohort groups then a user should be assigned one.
-        Also verifies that cohort config changes on studio/moduletore side will
-        not be reflected on lms after the migrations are done.
         """
         course = modulestore().get_course(self.toy_course_key)
         self.assertFalse(course.is_cohorted)
 
         user1 = UserFactory(username="test", email="a@b.com")
         user2 = UserFactory(username="test2", email="a2@b.com")
-        user3 = UserFactory(username="test3", email="a3@b.com")
 
         cohort = CohortFactory(course_id=course.id, name="TestCohort")
 
@@ -307,6 +308,26 @@ class TestCohorts(TestCase):
 
         self.assertEquals(cohorts.get_cohort(user2, course.id).name, "AutoGroup", "user2 should be auto-cohorted")
 
+    def test_cohorting_with_migrations_done(self):
+        """
+        Verifies that cohort config changes on studio/moduletore side will
+        not be reflected on lms after the migrations are done.
+        """
+        course = modulestore().get_course(self.toy_course_key)
+
+        user1 = UserFactory(username="test", email="a@b.com")
+        user2 = UserFactory(username="test2", email="a2@b.com")
+
+        # Add an auto_cohort_group to the course...
+        config_course_cohorts(
+            course,
+            discussions=[],
+            cohorted=True,
+            auto_cohort_groups=["AutoGroup"]
+        )
+
+        self.assertEquals(cohorts.get_cohort(user1, course.id).name, "AutoGroup", "user1 should be auto-cohorted")
+
         # Now set the auto_cohort_group to something different
         # This will have no effect on lms side as we are already done with migrations
         config_course_cohorts(
@@ -317,11 +338,11 @@ class TestCohorts(TestCase):
         )
 
         self.assertEquals(
-            cohorts.get_cohort(user3, course.id).name, "AutoGroup", "user3 should be assigned to AutoGroups"
+            cohorts.get_cohort(user2, course.id).name, "AutoGroup", "user2 should be assigned to AutoGroups"
         )
 
         self.assertEquals(
-            cohorts.get_cohort(user2, course.id).name, "AutoGroup", "user2 should still be in originally placed cohort"
+            cohorts.get_cohort(user1, course.id).name, "AutoGroup", "user1 should still be in originally placed cohort"
         )
 
     def test_cohorting_with_no_auto_cohort_groups(self):
