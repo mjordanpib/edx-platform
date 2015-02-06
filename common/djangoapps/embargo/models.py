@@ -153,11 +153,11 @@ class RestrictedCourse(models.Model):
         """
         Cache all restricted courses and returns the list of course_keys that are restricted
         """
-        restricted_countries = cache.get(cls.cache_key_name())
-        if not restricted_countries:
-            restricted_countries = list(RestrictedCourse.objects.values_list('course_key', flat=True))
-            cache.set(cls.cache_key_name(), restricted_countries)
-        return restricted_countries
+        restricted_courses = cache.get(cls.cache_key_name())
+        if not restricted_courses:
+            restricted_courses = list(RestrictedCourse.objects.values_list('course_key', flat=True))
+            cache.set(cls.cache_key_name(), restricted_courses)
+        return restricted_courses
 
     def __unicode__(self):
         return unicode(self.course_key)
