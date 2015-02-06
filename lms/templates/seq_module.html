@@ -11,8 +11,8 @@
         ## implementation note: will need to figure out how to handle combining detail
         ## statuses of multiple modules in js.
         <li>
-        <a id="tab_${idx}"
-           class="seq_${item['type']} inactive progress-${item['progress_status']}"
+        <a class="seq_${item['type']} inactive progress-${item['progress_status']}"
+           id="tab_${idx}"
            href="javascript:void(0);"
            title="${item['title']|h}"
            data-id="${item['id']}"
