@@ -399,13 +399,18 @@ class SplitBulkWriteMixin(BulkOperationsMixin):
 
         bulk_write_record = self._get_bulk_ops_record(course_key)
         if bulk_write_record.active:
+            # Only query for the definitions that aren't already cached.
             for definition in bulk_write_record.definitions.values():
                 definition_id = definition.get('_id')
                 if definition_id in ids:
                     ids.remove(definition_id)
                     definitions.append(definition)
 
-        definitions.extend(self.db_connection.get_definitions(list(ids)))
+        # Query the db for the definitions.
+        defs_from_db = self.db_connection.get_definitions(list(ids))
+        # Add the retrieved definitions to the cache.
+        bulk_write_record.definitions.update({d.get('_id'): d for d in defs_from_db})
+        definitions.extend(defs_from_db)
         return definitions
 
     def update_definition(self, course_key, definition):
@@ -717,7 +722,7 @@ class SplitMongoModuleStore(SplitBulkWriteMixin, ModuleStoreWriteBase):
         if runtime is None:
             runtime = self.create_runtime(course_entry, lazy)
             self._add_cache(course_entry.structure['_id'], runtime)
-            self.cache_items(runtime, block_keys, course_entry.course_key, depth, lazy)
+            self.cache_items(runtime, block_keys, course_entry.course_key, depth, depth == 0 and lazy)
 
         return [runtime.load_item(block_key, course_entry, **kwargs) for block_key in block_keys]
 
