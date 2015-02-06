@@ -36,9 +36,26 @@ class CourseUserGroup(models.Model):
     GROUP_TYPE_CHOICES = ((COHORT, 'Cohort'),)
     group_type = models.CharField(max_length=20, choices=GROUP_TYPE_CHOICES)
 
+    @classmethod
+    def create(cls, name, course_id, group_type=COHORT):
+        """
+        Create a new course user group.
+
+        Args:
+            name: Name of group
+            course_id: course id
+            group_type: group type
+        """
+        return cls.objects.get_or_create(
+            course_id=course_id,
+            group_type=group_type,
+            name=name
+        )
+
 
 class CourseUserGroupPartitionGroup(models.Model):
     """
+    Create User Partition Info.
     """
     course_user_group = models.OneToOneField(CourseUserGroup)
     partition_id = models.IntegerField(
@@ -80,3 +97,17 @@ class CourseCohort(models.Model):
     MANUAL = 'manual'
     ASSIGNMENT_TYPE_CHOICES = ((RANDOM, 'Random'), (MANUAL, 'Manual'),)
     assignment_type = models.CharField(max_length=20, choices=ASSIGNMENT_TYPE_CHOICES, default=MANUAL)
+
+    @classmethod
+    def create(cls, course_user_group, assignment_type=MANUAL):
+        """
+        Create a new course cohort info object.
+
+        Args:
+            course_user_group: CourseUserGroup
+            assignment_type: 'random' or 'manual'
+        """
+        return cls.objects.get_or_create(
+            course_user_group=course_user_group,
+            defaults={'assignment_type': assignment_type}
+        )

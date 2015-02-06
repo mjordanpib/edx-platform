@@ -211,20 +211,16 @@ def get_cohort(user, course_key, assign=True):
         if not assign:
             return None
 
-    course_cohorts = get_course_cohorts(course, assignment_type=CourseCohort.RANDOM)
-    if course_cohorts:
-        course_cohort = local_random().choice(course_cohorts)
+    cohorts = get_course_cohorts(course, assignment_type=CourseCohort.RANDOM)
+    if cohorts:
+        cohort = local_random().choice(cohorts)
     else:
-        course_cohort, __ = CourseUserGroup.objects.get_or_create(
-            course_id=course_key,
-            group_type=CourseUserGroup.COHORT,
-            name=DEFAULT_COHORT_NAME
-        )
-        CourseCohort.objects.get_or_create(course_user_group=course_cohort, assignment_type=CourseCohort.RANDOM)
+        cohort, __ = CourseUserGroup.create(name=DEFAULT_COHORT_NAME, course_id=course_key)
+        CourseCohort.create(course_user_group=cohort, assignment_type=CourseCohort.RANDOM)
 
-    user.course_groups.add(course_cohort)
+    user.course_groups.add(cohort)
 
-    return course_cohort
+    return cohort
 
 
 def migrate_cohort_settings(course):
@@ -232,8 +228,9 @@ def migrate_cohort_settings(course):
     Migrate all the cohort settings associated with this course from modulestore to mysql.
     After that we will never touch modulestore for any cohort related settings.
     """
+    course_id = course.location.course_key
     cohort_settings, created = CourseCohortsSettings.objects.get_or_create(
-        course_id=course.location.course_key,
+        course_id=course_id,
         defaults={
             'is_cohorted': course.is_cohorted,
             'cohorted_discussions': json.dumps(list(course.cohorted_discussions)),
@@ -245,25 +242,15 @@ def migrate_cohort_settings(course):
     if created:
         # Update the manual cohorts already present in CourseUserGroup
         manual_cohorts = CourseUserGroup.objects.filter(
-            course_id=course.location.course_key,
+            course_id=course_id,
             group_type=CourseUserGroup.COHORT
         ).exclude(name__in=course.auto_cohort_groups)
         for cohort in manual_cohorts:
-            CourseCohort.objects.get_or_create(
-                course_user_group=cohort,
-                defaults={'assignment_type': CourseCohort.MANUAL}
-            )
+            CourseCohort.create(course_user_group=cohort)
 
         for group_name in course.auto_cohort_groups:
-            cohort, created = CourseUserGroup.objects.get_or_create(
-                course_id=course.location.course_key,
-                group_type=CourseUserGroup.COHORT,
-                name=group_name
-            )
-            CourseCohort.objects.get_or_create(
-                course_user_group=cohort,
-                defaults={'assignment_type': CourseCohort.RANDOM}
-            )
+            cohort, __ = CourseUserGroup.create(name=group_name, course_id=course_id)
+            CourseCohort.create(course_user_group=cohort, assignment_type=CourseCohort.RANDOM)
 
     return cohort_settings
 
@@ -332,12 +319,8 @@ def add_cohort(course_key, name, assignment_type):
     except Http404:
         raise ValueError("Invalid course_key")
 
-    cohort = CourseUserGroup.objects.create(
-        course_id=course.id,
-        group_type=CourseUserGroup.COHORT,
-        name=name
-    )
-    CourseCohort(course_user_group=cohort, assignment_type=assignment_type).save()
+    cohort, __ = CourseUserGroup.create(name=name, course_id=course.id)
+    CourseCohort.create(course_user_group=cohort, assignment_type=assignment_type)
 
     tracker.emit(
         "edx.cohort.creation_requested",
