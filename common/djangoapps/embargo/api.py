@@ -30,10 +30,6 @@ def _check_ip_lists(ip_addr):
     if ip_addr in IPFilter.current().blacklist_ips:
         return False
 
-    # If we're white-listed, then allow access
-    if ip_addr in IPFilter.current().whitelist_ips:
-        return True
-
     return True
     # If none of the other checks caught anything,
     # implicitly return True to indicate that the user can access the course
@@ -113,7 +109,7 @@ def check_course_access(user, ip_address, course_key):
     # if user country has access to course return True
     if not CountryAccessRule.check_country_access(course_key, user_country_from_ip):
         return False
-    #
+
     # Retrieve the country code from the user profile.
     user_country_from_profile = get_user_country_from_profile(user)
     # if profile country has access return True

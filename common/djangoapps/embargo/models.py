@@ -272,9 +272,7 @@ class CountryAccessRule(models.Model):
             allowed_countries = cls._get_country_access_list(course_id)
             cache.set(cls.cache_key_for_consolidated_countries(course_id), allowed_countries)
 
-        if country == '' or country in allowed_countries:
-            return True
-        return False
+        return country == '' or country in allowed_countries
 
     @classmethod
     def _get_country_access_list(cls, course_id):

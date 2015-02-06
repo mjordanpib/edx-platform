@@ -85,36 +85,36 @@ class EmbargoMiddleware(object):
                 return None
             else:
                 return self._embargo_redirect_response
-        else:
-            url = request.path
-            course_id = course_id_from_url(url)
-            course_is_embargoed = EmbargoedCourse.is_embargoed(course_id)
 
-            # If they're trying to access a course that cares about embargoes
-            if self.site_enabled or course_is_embargoed:
+        url = request.path
+        course_id = course_id_from_url(url)
+        course_is_embargoed = EmbargoedCourse.is_embargoed(course_id)
 
-                # Construct the list of functions that check whether the user is embargoed.
-                # We wrap each of these functions in a decorator that logs the reason the user
-                # was blocked.
-                # Each function should return `True` iff the user is blocked by an embargo.
-                check_functions = [
-                    self._log_embargo_reason(check_func, course_id, course_is_embargoed)
-                    for check_func in [
-                        partial(self._is_embargoed_by_ip, get_ip(request)),
-                        partial(self._is_embargoed_by_profile_country, request.user)
-                    ]
+        # If they're trying to access a course that cares about embargoes
+        if self.site_enabled or course_is_embargoed:
+
+            # Construct the list of functions that check whether the user is embargoed.
+            # We wrap each of these functions in a decorator that logs the reason the user
+            # was blocked.
+            # Each function should return `True` iff the user is blocked by an embargo.
+            check_functions = [
+                self._log_embargo_reason(check_func, course_id, course_is_embargoed)
+                for check_func in [
+                    partial(self._is_embargoed_by_ip, get_ip(request)),
+                    partial(self._is_embargoed_by_profile_country, request.user)
                 ]
+            ]
 
-                # Perform each of the checks
-                # If the user fails any of the checks, immediately redirect them
-                # and skip later checks.
-                for check_func in check_functions:
-                    if check_func():
-                        return self._embargo_redirect_response
+            # Perform each of the checks
+            # If the user fails any of the checks, immediately redirect them
+            # and skip later checks.
+            for check_func in check_functions:
+                if check_func():
+                    return self._embargo_redirect_response
 
-            # If all the check functions pass, implicitly return None
-            # so that the middleware processor can continue processing
-            # the response.
+        # If all the check functions pass, implicitly return None
+        # so that the middleware processor can continue processing
+        # the response.
 
     def _is_embargoed_by_ip(self, ip_addr, course_id=u"", course_is_embargoed=False):
         """
