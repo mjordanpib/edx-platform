@@ -19,7 +19,7 @@
            data-element="${idx+1}"
            data-page-title="${item['page_title']|h}"
            aria-controls="seq_contents_${idx}">
-            <i class="icon fa seq_${item['type']}"></i>
+            <i class="icon fa seq_${item['type']}" aria-hidden="true"></i>
             <p><span class="sr">${item['type']}</span> ${item['title']}</p>
           </a>
         </li>
