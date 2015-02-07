@@ -37,6 +37,7 @@ from lazy import lazy
 
 from django.core.exceptions import MiddlewareNotUsed
 from django.core.cache import cache
+from django.core.urlresolvers import reverse
 from django.conf import settings
 from django.shortcuts import redirect
 from django.http import HttpResponseRedirect, HttpResponseForbidden
@@ -90,7 +91,29 @@ class EmbargoMiddleware(object):
         # This is a more flexible implementation of the embargo feature that allows
         # per-course country access rules.
         if self.enable_country_access:
-            return self.country_access_rules(request)
+            ip_address = get_ip(request)
+
+            if ip_address in IPFilter.current().blacklist_ips:
+                # If the IP is blacklisted, reject.
+                # This applies to any request, not just courseware URLs.
+                ip_blacklist_url = reverse(
+                    'embargo_blocked_message',
+                    kwargs={
+                        'access_point': 'courseware',
+                        'message_key': 'embargo'
+                    }
+                )
+                return redirect(ip_blacklist_url)
+
+            elif ip_address in IPFilter.current().whitelist_ips:
+                # If the IP is whitelisted, then allow access,
+                # skipping later checks.
+                return None
+
+            else:
+                # Otherwise, perform the country access checks.
+                # This applies only to courseware URLs.
+                return self.country_access_rules(request.user, ip_address, request.path)
 
         url = request.path
         course_id = course_id_from_url(url)
@@ -312,24 +335,24 @@ class EmbargoMiddleware(object):
 
         return _inner
 
-    def country_access_rules(self, request):
+    def country_access_rules(self, user, ip_address, url_path):
         """
-        check the country access rules for a given course.
-        if course id is invalid return True
-        Args:
-            request
+        Check the country access rules for a given course.
+        Applies only to courseware URLs.
 
-        Return:
+        Args:
+            user (User): The user making the current request.
+            ip_address (str): The IP address from which the request originated.
+            url_path (str): The request path.
+
+        Returns:
             HttpResponse or None
 
         """
-        url = request.path
-        course_id = course_id_from_url(url)
+        course_id = course_id_from_url(url_path)
         blocked = (
             course_id is not None and
-            not embargo_api.check_course_access(
-                request.user, get_ip(request), course_id
-            )
+            not embargo_api.check_course_access(user, ip_address, course_id)
         )
 
         if blocked:
