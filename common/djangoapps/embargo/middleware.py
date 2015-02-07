@@ -45,7 +45,7 @@ from util.request import course_id_from_url
 
 from student.models import unique_id_for_user
 from embargo.models import EmbargoedCourse, EmbargoedState, IPFilter
-from embargo.api import check_course_access
+from embargo import api as embargo_api
 
 log = logging.getLogger(__name__)
 
@@ -86,11 +86,11 @@ class EmbargoMiddleware(object):
         """
         Processes embargo requests.
         """
+        # If the feature flag is set, use the new "country access" implementation.
+        # This is a more flexible implementation of the embargo feature that allows
+        # per-course country access rules.
         if self.enable_country_access:
-            if self.country_access_rules(request):
-                return None
-            else:
-                return self._embargo_redirect_response
+            return self.country_access_rules(request)
 
         url = request.path
         course_id = course_id_from_url(url)
@@ -320,11 +320,18 @@ class EmbargoMiddleware(object):
             request
 
         Return:
-            boolean: True if the user has access else false.
+            HttpResponse or None
 
         """
         url = request.path
         course_id = course_id_from_url(url)
-        if course_id is None:
-            return True
-        return check_course_access(request.user, get_ip(request), course_id)
+        blocked = (
+            course_id is not None and
+            not embargo_api.check_course_access(
+                request.user, get_ip(request), course_id
+            )
+        )
+
+        if blocked:
+            redirect_url = embargo_api.message_url_path(course_id, 'courseware')
+            return redirect(redirect_url)

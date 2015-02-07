@@ -96,6 +96,17 @@ class EmbargoCheckAccessApiTests(ModuleStoreTestCase):
         # Verify that the access rules were applied correctly
         self.assertEqual(result, allow_access)
 
+    def test_course_not_restricted(self):
+        # No restricted course model for this course key,
+        # so all access checks should be skipped.
+        unrestricted_course = CourseFactory.create()
+        with self.assertNumQueries(1):
+            embargo_api.check_course_access(self.user, '0.0.0.0', unrestricted_course.id)
+
+        # The second check should require no database queries
+        with self.assertNumQueries(0):
+            embargo_api.check_course_access(self.user, '0.0.0.0', unrestricted_course.id)
+
     def test_ip_v6(self):
         # Test the scenario that will go through every check
         # (restricted course, but pass all the checks)
