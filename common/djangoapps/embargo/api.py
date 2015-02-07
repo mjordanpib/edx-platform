@@ -19,26 +19,6 @@ from embargo.exceptions import InvalidAccessPoint
 log = logging.getLogger(__name__)
 
 
-def _check_ip_lists(ip_addr):
-    """
-    Check whether the user is embargoed based on the IP address.
-
-    Args:
-        ip_addr (str): The IP address the request originated from.
-
-    Returns:
-        A True if the user is not blacklisted, otherwise False
-
-    """
-    # If blacklisted, immediately fail
-    if ip_addr in IPFilter.current().blacklist_ips:
-        return False
-
-    return True
-    # If none of the other checks caught anything,
-    # implicitly return True to indicate that the user can access the course
-
-
 def get_user_country_from_profile(user):
     """
     Check whether the user is embargoed based on the country code in the user's profile.
@@ -102,20 +82,17 @@ def check_course_access(user, ip_address, course_key):
     if not course_is_restricted:
         return True
 
-    # If ipaddress has access return True
-    if not _check_ip_lists(ip_address):
-        return False
-
     # Retrieve the country code from the IP address
     # and check it against the allowed countries list for a course
-
     user_country_from_ip = _country_code_from_ip(ip_address)
+
     # if user country has access to course return True
     if not CountryAccessRule.check_country_access(course_key, user_country_from_ip):
         return False
 
     # Retrieve the country code from the user profile.
     user_country_from_profile = get_user_country_from_profile(user)
+
     # if profile country has access return True
     if not CountryAccessRule.check_country_access(course_key, user_country_from_profile):
         return False

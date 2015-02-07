@@ -19,7 +19,8 @@ from xmodule.modulestore.tests.django_utils import (
 # Explicitly import the cache from ConfigurationModel so we can reset it after each test
 from config_models.models import cache
 from embargo.models import (
-    IPFilter, RestrictedCourse, Country, CountryAccessRule, WHITE_LIST, BLACK_LIST
+    RestrictedCourse, Country, CountryAccessRule,
+    WHITE_LIST, BLACK_LIST
 )
 from django_countries import countries
 
@@ -84,13 +85,6 @@ class EmbargoCountryAccessRulesTests(ModuleStoreTestCase):
         ]
         CountryAccessRule.objects.bulk_create(country_access_black_rules)
 
-        IPFilter(
-            whitelist='5.0.0.0',
-            blacklist='1.0.0.0',
-            changed_by=self.user,
-            enabled=True
-        ).save()
-
         # Text from lms/templates/static_templates/embargo.html
         self.embargo_text = "Unfortunately, at this time edX must comply with export controls, and we cannot allow you to access this course."  # pylint: disable=line-too-long
 
@@ -108,6 +102,7 @@ class EmbargoCountryAccessRulesTests(ModuleStoreTestCase):
             REMOTE_ADDR='1.0.0.0'
         )
         self.assertEqual(response.status_code, 302)
+
         # Following the redirect should give us the embargo page
         response = self.client.get(
             self.embargoed_course_blacklisted,
@@ -173,127 +168,6 @@ class EmbargoCountryAccessRulesTests(ModuleStoreTestCase):
             HTTP_X_FORWARDED_FOR='2001:250::',
             REMOTE_ADDR='2001:250::'
         )
-        self.assertEqual(response.status_code, 200)
-
-    @mock.patch.dict(settings.FEATURES, {'ENABLE_COUNTRY_ACCESS': True})
-    def test_ip_exceptions(self):
-        # Explicitly whitelist/blacklist some IPs
-        IPFilter(
-            whitelist='1.0.0.0',
-            blacklist='5.0.0.0',
-            changed_by=self.user,
-            enabled=True
-        ).save()
-
-        # Accessing an embargoed page from a blocked IP that's been whitelisted
-        # should succeed
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='1.0.0.0',
-            REMOTE_ADDR='1.0.0.0'
-        )
-        self.assertEqual(response.status_code, 200)
-
-        # Accessing a regular course from a blocked IP that's been whitelisted should succeed
-        response = self.client.get(
-            self.regular_page,
-            HTTP_X_FORWARDED_FOR='1.0.0.0',
-            REMOTE_ADDR='1.0.0.0'
-        )
-        self.assertEqual(response.status_code, 200)
-
-        # Accessing an embargoed course from non-embargoed IP that's been blacklisted
-        #  should cause a redirect
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='5.0.0.0',
-            REMOTE_ADDR='5.0.0.0'
-        )
-        self.assertEqual(response.status_code, 302)
-        # Following the redirect should give us the embargo page
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='5.0.0.0',
-            REMOTE_ADDR='1.0.0.0',
-            follow=True
-        )
-        self.assertIn(self.embargo_text, response.content)
-
-        # Accessing a regular course from a non-embargoed IP that's been blacklisted should succeed
-        response = self.client.get(self.regular_page, HTTP_X_FORWARDED_FOR='5.0.0.0', REMOTE_ADDR='5.0.0.0')
-        self.assertEqual(response.status_code, 200)
-
-    @mock.patch.dict(settings.FEATURES, {'ENABLE_COUNTRY_ACCESS': True})
-    def test_ip_network_exceptions(self):
-        # Explicitly whitelist/blacklist some IP networks
-        IPFilter(
-            whitelist='1.0.0.1/24',
-            blacklist='5.0.0.0/16,1.1.0.0/24',
-            changed_by=self.user,
-            enabled=True
-        ).save()
-
-        # Accessing an embargoed page from a blocked IP that's been whitelisted with a network
-        # should succeed
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='1.0.0.0',
-            REMOTE_ADDR='1.0.0.0'
-        )
-        self.assertEqual(response.status_code, 200)
-
-        # Accessing a regular course from a blocked IP that's been whitelisted with a network
-        # should succeed
-        response = self.client.get(self.regular_page, HTTP_X_FORWARDED_FOR='1.0.0.0', REMOTE_ADDR='1.0.0.0')
-        self.assertEqual(response.status_code, 200)
-
-        # Accessing an embargoed course from non-embargoed IP that's been blacklisted with a network
-        # should cause a redirect
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='5.0.0.100',
-            REMOTE_ADDR='5.0.0.100'
-        )
-        self.assertEqual(response.status_code, 302)
-
-        # Following the redirect should give us the embargo page
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='5.0.0.100',
-            REMOTE_ADDR='5.0.0.100',
-            follow=True
-        )
-        self.assertIn(self.embargo_text, response.content)
-
-        # Accessing an embargoed course from non-embargoed IP that's been blaclisted with a network
-        # should cause a redirect
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='1.1.0.1',
-            REMOTE_ADDR='1.1.0.1'
-        )
-        self.assertEqual(response.status_code, 302)
-        # Following the redirect should give us the embargo page
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='1.1.0.0',
-            REMOTE_ADDR='1.1.0.0',
-            follow=True
-        )
-        self.assertIn(self.embargo_text, response.content)
-
-        # Accessing an embargoed from a blocked IP that's not blacklisted by the network rule.
-        # should succeed
-        response = self.client.get(
-            self.embargoed_course_blacklisted,
-            HTTP_X_FORWARDED_FOR='1.1.1.0',
-            REMOTE_ADDR='1.1.1.0'
-        )
-        self.assertEqual(response.status_code, 200)
-
-        # Accessing a regular course from a non-embargoed IP that's been blacklisted
-        # should succeed
-        response = self.client.get(self.regular_page, HTTP_X_FORWARDED_FOR='5.0.0.0', REMOTE_ADDR='5.0.0.0')
         self.assertEqual(response.status_code, 200)
 
     @mock.patch.dict(settings.FEATURES, {'ENABLE_COUNTRY_ACCESS': True})
@@ -435,7 +309,7 @@ class EmbargoCountryAccessRulesTests(ModuleStoreTestCase):
     @mock.patch.dict(settings.FEATURES, {'ENABLE_COUNTRY_ACCESS': True})
     def test_embargo_profile_country_cache(self):
         # Warm the cache
-        with self.assertNumQueries(25):
+        with self.assertNumQueries(24):
             self.client.get(self.embargoed_course_blacklisted)
 
         # Access the page multiple times, but expect that we hit
