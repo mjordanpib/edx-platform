@@ -193,6 +193,26 @@ class EmbargoMessageUrlApiTests(UrlResetMixin, ModuleStoreTestCase):
         with self.assertRaises(InvalidAccessPoint):
             embargo_api.message_url_path(self.course.id, "invalid")
 
+    def test_message_url_stale_cache(self):
+        # Retrieve the URL once, populating the cache with the list
+        # of restricted courses.
+        self._restrict_course(self.course.id)
+        embargo_api.message_url_path(self.course.id, 'courseware')
+
+        # Delete the restricted course entry
+        RestrictedCourse.objects.get(course_key=self.course.id).delete()
+
+        # Clear the message URL cache
+        message_cache_key = (
+            'embargo.message_url_path.courseware.{course_key}'
+        ).format(course_key=self.course.id)
+        cache.delete(message_cache_key)
+
+        # Try again.  Even though the cache results are stale,
+        # we should still get a valid URL.
+        url_path = embargo_api.message_url_path(self.course.id, 'courseware')
+        self.assertEqual(url_path, '/embargo/blocked-message/courseware/default/')
+
     def _restrict_course(self, course_key):
         """Restrict the user from accessing the course. """
         country = Country.objects.create(country='us')
