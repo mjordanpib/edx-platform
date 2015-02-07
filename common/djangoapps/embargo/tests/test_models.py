@@ -4,7 +4,7 @@ from django.db.utils import IntegrityError
 from opaque_keys.edx.locations import SlashSeparatedCourseKey
 from embargo.models import (
     EmbargoedCourse, EmbargoedState, IPFilter, RestrictedCourse,
-    Country, CountryAccessRule, WHITE_LIST, BLACK_LIST
+    Country, CountryAccessRule
 )
 
 
@@ -165,12 +165,12 @@ class CountryAccessRuleTest(TestCase):
         restricted_course1 = RestrictedCourse.objects.create(course_key=course_id)
         access_rule = CountryAccessRule.objects.create(
             restricted_course=restricted_course1,
-            rule_type=WHITE_LIST,
+            rule_type=CountryAccessRule.WHITELIST_RULE,
             country=country
         )
 
         self.assertEquals(
-            access_rule.__unicode__(),
+            unicode(access_rule),
             "Whitelist New Zealand (NZ) for abc/123/doremi"
         )
 
@@ -178,12 +178,12 @@ class CountryAccessRuleTest(TestCase):
         restricted_course1 = RestrictedCourse.objects.create(course_key=course_id)
         access_rule = CountryAccessRule.objects.create(
             restricted_course=restricted_course1,
-            rule_type=BLACK_LIST,
+            rule_type=CountryAccessRule.BLACKLIST_RULE,
             country=country
         )
 
         self.assertEquals(
-            access_rule.__unicode__(),
+            unicode(access_rule),
             "Blacklist New Zealand (NZ) for def/123/doremi"
         )
 
@@ -198,14 +198,14 @@ class CountryAccessRuleTest(TestCase):
 
         CountryAccessRule.objects.create(
             restricted_course=restricted_course1,
-            rule_type=WHITE_LIST,
+            rule_type=CountryAccessRule.WHITELIST_RULE,
             country=country
         )
 
         with self.assertRaises(IntegrityError):
             CountryAccessRule.objects.create(
                 restricted_course=restricted_course1,
-                rule_type=BLACK_LIST,
+                rule_type=CountryAccessRule.BLACKLIST_RULE,
                 country=country
             )
 
@@ -216,7 +216,7 @@ class CountryAccessRuleTest(TestCase):
 
         course = CountryAccessRule.objects.create(
             restricted_course=restricted_course1,
-            rule_type=WHITE_LIST,
+            rule_type=CountryAccessRule.WHITELIST_RULE,
             country=country
         )
 
@@ -227,8 +227,7 @@ class CountryAccessRuleTest(TestCase):
         with self.assertNumQueries(0):
             CountryAccessRule.check_country_access(course_id, 'NZ')
 
-        # deleting an object will delete cache also.and hit db on
-        # get the country access lists for course
+        # Deleting an object will invalidate the cache
         course.delete()
         with self.assertNumQueries(1):
             CountryAccessRule.check_country_access(course_id, 'NZ')

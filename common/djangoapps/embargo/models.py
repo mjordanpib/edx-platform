@@ -26,10 +26,6 @@ from xmodule_django.models import CourseKeyField, NoneToEmptyManager
 from embargo.messages import ENROLL_MESSAGES, COURSEWARE_MESSAGES
 
 
-WHITE_LIST = 'whitelist'
-BLACK_LIST = 'blacklist'
-
-
 class EmbargoedCourse(models.Model):
     """
     Enable course embargo on a course-by-course basis.
@@ -100,6 +96,8 @@ class RestrictedCourse(models.Model):
     These displayed on pages served by the embargo app.
 
     """
+    CACHE_KEY = 'embargo.restricted_courses'
+
     ENROLL_MSG_KEY_CHOICES = tuple([
         (msg_key, msg.description)
         for msg_key, msg in ENROLL_MESSAGES.iteritems()
@@ -130,11 +128,6 @@ class RestrictedCourse(models.Model):
     )
 
     @classmethod
-    def cache_key_name(cls):
-        """Return the name of the key to use to cache the current restricted course list"""
-        return 'embargo/RestrictedCourse/courses'
-
-    @classmethod
     def is_restricted_course(cls, course_id):
         """
         Check if the course is in restricted list
@@ -153,10 +146,10 @@ class RestrictedCourse(models.Model):
         """
         Cache all restricted courses and returns the list of course_keys that are restricted
         """
-        restricted_courses = cache.get(cls.cache_key_name())
+        restricted_courses = cache.get(cls.CACHE_KEY)
         if not restricted_courses:
             restricted_courses = list(RestrictedCourse.objects.values_list('course_key', flat=True))
-            cache.set(cls.cache_key_name(), restricted_courses)
+            cache.set(cls.CACHE_KEY, restricted_courses)
         return restricted_courses
 
     def message_key_for_access_point(self, access_point):
@@ -187,11 +180,11 @@ class RestrictedCourse(models.Model):
         Clear the cached value when saving a RestrictedCourse entry
         """
         super(RestrictedCourse, self).save(*args, **kwargs)
-        cache.delete(self.cache_key_name())
+        cache.delete(self.CACHE_KEY)
 
     def delete(self, using=None):
         super(RestrictedCourse, self).delete()
-        cache.delete(self.cache_key_name())
+        cache.delete(self.CACHE_KEY)
 
 
 class Country(models.Model):
@@ -236,15 +229,18 @@ class CountryAccessRule(models.Model):
 
     """
 
+    WHITELIST_RULE = 'whitelist'
+    BLACKLIST_RULE = 'blacklist'
+
     RULE_TYPE_CHOICES = (
-        (WHITE_LIST, 'Whitelist (allow only these countries)'),
-        (BLACK_LIST, 'Blacklist (block these countries)'),
+        (WHITELIST_RULE, 'Whitelist (allow only these countries)'),
+        (BLACKLIST_RULE, 'Blacklist (block these countries)'),
     )
 
     rule_type = models.CharField(
         max_length=255,
         choices=RULE_TYPE_CHOICES,
-        default=BLACK_LIST,
+        default=BLACKLIST_RULE,
         help_text=ugettext_lazy(
             u"Whether to include or exclude the given course. "
             u"If whitelist countries are specified, then ONLY users from whitelisted countries "
@@ -263,15 +259,7 @@ class CountryAccessRule(models.Model):
         help_text=ugettext_lazy(u"The country to which this rule applies.")
     )
 
-    @classmethod
-    def cache_key_for_consolidated_countries(cls, course_id):
-        """
-        Args:
-            course_id (str): course_id to look for
-        Returns:
-            Consolidated list of accessible countries for given course
-        """
-        return "{}/allowed/countries".format(course_id)
+    CACHE_KEY = u"embargo.allowed_countries.{course_key}"
 
     @classmethod
     def check_country_access(cls, course_id, country):
@@ -287,10 +275,11 @@ class CountryAccessRule(models.Model):
             True if country found in allowed country
             otherwise check given country exists in list
         """
-        allowed_countries = cache.get(cls.cache_key_for_consolidated_countries(course_id))
+        cache_key = cls.CACHE_KEY.format(course_key=course_id)
+        allowed_countries = cache.get(cache_key)
         if not allowed_countries:
             allowed_countries = cls._get_country_access_list(course_id)
-            cache.set(cls.cache_key_for_consolidated_countries(course_id), allowed_countries)
+            cache.set(cache_key, allowed_countries)
 
         return country == '' or country in allowed_countries
 
@@ -332,12 +321,12 @@ class CountryAccessRule(models.Model):
         return list(whitelist_countries - blacklist_countries)
 
     def __unicode__(self):
-        if self.rule_type == WHITE_LIST:
+        if self.rule_type == self.WHITELIST_RULE:
             return _(u"Whitelist {country} for {course}").format(
                 course=unicode(self.restricted_course.course_key),
                 country=unicode(self.country),
             )
-        elif self.rule_type == BLACK_LIST:
+        elif self.rule_type == self.BLACKLIST_RULE:
             return _(u"Blacklist {country} for {course}").format(
                 course=unicode(self.restricted_course.course_key),
                 country=unicode(self.country),
@@ -348,14 +337,18 @@ class CountryAccessRule(models.Model):
         Clear the cached value when saving a entry
         """
         super(CountryAccessRule, self).save(*args, **kwargs)
-        cache.delete(self.cache_key_for_consolidated_countries(unicode(self.restricted_course.course_key)))
+        self._invalidate_cache()
 
     def delete(self, using=None):
         """
         clear the cached value when saving a entry
         """
         super(CountryAccessRule, self).delete()
-        cache.delete(self.cache_key_for_consolidated_countries(unicode(self.restricted_course.course_key)))
+        self._invalidate_cache()
+
+    def _invalidate_cache(self):
+        cache_key = self.CACHE_KEY.format(course_key=self.restricted_course.course_key)
+        cache.delete(cache_key)
 
     class Meta:
         """a course can be added with either black or white list.  """

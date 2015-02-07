@@ -182,4 +182,6 @@ def _get_message_url_path_from_db(course_key, access_point):
             }
         )
     except RestrictedCourse.DoesNotExist:
+        # This occurs only if there's a race condition
+        # between cache invalidation and database access.
         return default_path

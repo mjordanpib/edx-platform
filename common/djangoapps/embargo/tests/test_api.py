@@ -19,9 +19,7 @@ from xmodule.modulestore.tests.django_utils import (
 )
 
 from embargo.models import (
-    RestrictedCourse, Country,
-    CountryAccessRule,
-    WHITE_LIST, BLACK_LIST
+    RestrictedCourse, Country, CountryAccessRule,
 )
 
 from util.testing import UrlResetMixin
@@ -68,14 +66,14 @@ class EmbargoCheckAccessApiTests(ModuleStoreTestCase):
         # Configure the access rules
         for whitelist_country in whitelist:
             CountryAccessRule.objects.create(
-                rule_type=WHITE_LIST,
+                rule_type=CountryAccessRule.WHITELIST_RULE,
                 restricted_course=self.restricted_course,
                 country=Country.objects.get(country=whitelist_country)
             )
 
         for blacklist_country in blacklist:
             CountryAccessRule.objects.create(
-                rule_type=BLACK_LIST,
+                rule_type=CountryAccessRule.BLACKLIST_RULE,
                 restricted_course=self.restricted_course,
                 country=Country.objects.get(country=blacklist_country)
             )
@@ -223,6 +221,6 @@ class EmbargoMessageUrlApiTests(UrlResetMixin, ModuleStoreTestCase):
         )
         CountryAccessRule.objects.create(
             restricted_course=restricted_course,
-            rule_type=BLACK_LIST,
+            rule_type=CountryAccessRule.BLACKLIST_RULE,
             country=country
         )
