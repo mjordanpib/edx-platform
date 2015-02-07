@@ -94,6 +94,13 @@ class EmbargoMiddleware(object):
             ip_address = get_ip(request)
 
             if ip_address in IPFilter.current().blacklist_ips:
+                log.info(
+                    (
+                        u"User %s was blocked from accessing %s because "
+                        u"because IP address %s is blacklisted."
+                    ), request.user.id, request.path, ip_address
+                )
+
                 # If the IP is blacklisted, reject.
                 # This applies to any request, not just courseware URLs.
                 ip_blacklist_url = reverse(
@@ -106,6 +113,14 @@ class EmbargoMiddleware(object):
                 return redirect(ip_blacklist_url)
 
             elif ip_address in IPFilter.current().whitelist_ips:
+                log.info(
+                    (
+                        u"User %s was allowed access to %s because "
+                        u"IP address %s is whitelisted."
+                    ),
+                    request.user.id, request.path, ip_address
+                )
+
                 # If the IP is whitelisted, then allow access,
                 # skipping later checks.
                 return None

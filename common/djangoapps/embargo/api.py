@@ -32,11 +32,10 @@ def check_course_access(user, ip_address, course_key):
         Boolean: True if the user has access to the course; False otherwise
 
     """
+    # First, check whether there are any restrictions on the course.
+    # If not, then we do not need to do any further checks
     course_is_restricted = RestrictedCourse.is_restricted_course(course_key)
-    # If they're trying to access a course that cares about embargoes
 
-    # If course is not restricted then return immediately return True
-    # no need for further checking
     if not course_is_restricted:
         return True
 
@@ -44,8 +43,15 @@ def check_course_access(user, ip_address, course_key):
     # and check it against the allowed countries list for a course
     user_country_from_ip = _country_code_from_ip(ip_address)
 
-    # if user country has access to course return True
     if not CountryAccessRule.check_country_access(course_key, user_country_from_ip):
+        log.info(
+            (
+                u"Blocking user %s from accessing course %s "
+                u"because the user's IP address %s appears to be "
+                u"located in %s."
+            ),
+            user.id, course_key, ip_address, user_country_from_ip
+        )
         return False
 
     # Retrieve the country code from the user profile.
@@ -53,6 +59,13 @@ def check_course_access(user, ip_address, course_key):
 
     # if profile country has access return True
     if not CountryAccessRule.check_country_access(course_key, user_country_from_profile):
+        log.info(
+            (
+                u"Blocking user %s from accessing course %s "
+                u"because the user's profile country is %s."
+            ),
+            user.id, course_key, user_country_from_profile
+        )
         return False
 
     return True
