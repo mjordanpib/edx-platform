@@ -129,7 +129,7 @@ class EmbargoMiddlewareAccessTests(UrlResetMixin, ModuleStoreTestCase):
         with restrict_course(self.course.id):
             # Make a request from the whitelisted IP address
             response = self.client.get(
-                self.non_courseware_url,
+                self.courseware_url,
                 HTTP_X_FORWARDED_FOR="192.168.10.20",
                 REMOTE_ADDR="192.168.10.20"
             )
