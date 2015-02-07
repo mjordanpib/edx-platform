@@ -237,10 +237,18 @@ class PayAndVerifyTest(UniqueCourseTest):
     @skip("Flaky 02/02/2015")
     def test_immediate_verification_enrollment(self):
         # Create a user and log them in
-        AutoAuthPage(self.browser).visit()
+        student_id = AutoAuthPage(self.browser).visit().get_user_id()
 
         # Navigate to the track selection page
         self.track_selection_page.visit()
+
+        # Expect enrollment activated event
+        assert_event_emitted_num_times(
+            self.event_collection,
+            "edx.course.enrollment.activated",
+            self.start_time,
+            student_id,
+            1)
 
         # Enter the payment and verification flow by choosing to enroll as verified
         self.track_selection_page.enroll('verified')
@@ -265,6 +273,15 @@ class PayAndVerifyTest(UniqueCourseTest):
         # Submit photos and proceed to the enrollment confirmation step
         self.payment_and_verification_flow.next_verification_step(self.immediate_verification_page)
 
+        # Expect that one mode_changed enrollment event fired as part of the upgrade
+        assert_event_emitted_num_times(
+            self.event_collection,
+            "edx.course.enrollment.mode_changed",
+            self.start_time,
+            student_id,
+            1
+        )
+
         # Navigate to the dashboard
         self.dashboard_page.visit()
 
@@ -278,6 +295,14 @@ class PayAndVerifyTest(UniqueCourseTest):
 
         # Navigate to the track selection page
         self.track_selection_page.visit()
+
+        # Expect enrollment activated event
+        assert_event_emitted_num_times(
+            self.event_collection,
+            "edx.course.enrollment.activated",
+            self.start_time,
+            student_id,
+            1)
 
         # Enter the payment and verification flow by choosing to enroll as verified
         self.track_selection_page.enroll('verified')
@@ -294,14 +319,6 @@ class PayAndVerifyTest(UniqueCourseTest):
         # Expect that we're enrolled as verified in the course
         enrollment_mode = self.dashboard_page.get_enrollment_mode(self.course_info["display_name"])
         self.assertEqual(enrollment_mode, 'verified')
-
-        # Expect enrollment activated event
-        assert_event_emitted_num_times(
-            self.event_collection,
-            "edx.course.enrollment.activated",
-            self.start_time,
-            student_id,
-            1)
 
     def test_enrollment_upgrade(self):
         # Create a user, log them in, and enroll them in the honor mode
@@ -326,13 +343,6 @@ class PayAndVerifyTest(UniqueCourseTest):
         # Submit payment
         self.fake_payment_page.submit_payment()
 
-        # Navigate to the dashboard
-        self.dashboard_page.visit()
-
-        # Expect that we're enrolled as verified in the course
-        enrollment_mode = self.dashboard_page.get_enrollment_mode(self.course_info["display_name"])
-        self.assertEqual(enrollment_mode, 'verified')
-
         # Expect that one mode_changed enrollment event fired as part of the upgrade
         assert_event_emitted_num_times(
             self.event_collection,
@@ -341,6 +351,13 @@ class PayAndVerifyTest(UniqueCourseTest):
             student_id,
             1
         )
+
+        # Navigate to the dashboard
+        self.dashboard_page.visit()
+
+        # Expect that we're enrolled as verified in the course
+        enrollment_mode = self.dashboard_page.get_enrollment_mode(self.course_info["display_name"])
+        self.assertEqual(enrollment_mode, 'verified')
 
         # Expect no enrollment activated event
         assert_event_emitted_num_times(
