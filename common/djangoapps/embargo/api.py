@@ -19,48 +19,6 @@ from embargo.exceptions import InvalidAccessPoint
 log = logging.getLogger(__name__)
 
 
-def get_user_country_from_profile(user):
-    """
-    Check whether the user is embargoed based on the country code in the user's profile.
-
-    Args:
-        user (User): The user attempting to access courseware.
-
-    Returns:
-        user country from profile.
-
-    """
-    cache_key = u'user.{user_id}.profile.country'.format(user_id=user.id)
-    profile_country = cache.get(cache_key)
-    if profile_country is None:
-        profile = getattr(user, 'profile', None)
-        if profile is not None and profile.country.code is not None:
-            profile_country = profile.country.code.upper()
-        else:
-            profile_country = ""
-        cache.set(cache_key, profile_country)
-
-    return profile_country
-
-
-def _country_code_from_ip(ip_addr):
-    """
-    Return the country code associated with an IP address.
-    Handles both IPv4 and IPv6 addresses.
-
-    Args:
-        ip_addr (str): The IP address to look up.
-
-    Returns:
-        str: A 2-letter country code.
-
-    """
-    if ip_addr.find(':') >= 0:
-        return pygeoip.GeoIP(settings.GEOIPV6_PATH).country_code_by_addr(ip_addr)
-    else:
-        return pygeoip.GeoIP(settings.GEOIP_PATH).country_code_by_addr(ip_addr)
-
-
 def check_course_access(user, ip_address, course_key):
     """
     Check is the user with this ip_address has access to the given course
@@ -91,7 +49,7 @@ def check_course_access(user, ip_address, course_key):
         return False
 
     # Retrieve the country code from the user profile.
-    user_country_from_profile = get_user_country_from_profile(user)
+    user_country_from_profile = _get_user_country_from_profile(user)
 
     # if profile country has access return True
     if not CountryAccessRule.check_country_access(course_key, user_country_from_profile):
@@ -136,6 +94,48 @@ def message_url_path(course_key, access_point):
         cache.set(cache_key, url)
 
     return url
+
+
+def _get_user_country_from_profile(user):
+    """
+    Check whether the user is embargoed based on the country code in the user's profile.
+
+    Args:
+        user (User): The user attempting to access courseware.
+
+    Returns:
+        user country from profile.
+
+    """
+    cache_key = u'user.{user_id}.profile.country'.format(user_id=user.id)
+    profile_country = cache.get(cache_key)
+    if profile_country is None:
+        profile = getattr(user, 'profile', None)
+        if profile is not None and profile.country.code is not None:
+            profile_country = profile.country.code.upper()
+        else:
+            profile_country = ""
+        cache.set(cache_key, profile_country)
+
+    return profile_country
+
+
+def _country_code_from_ip(ip_addr):
+    """
+    Return the country code associated with an IP address.
+    Handles both IPv4 and IPv6 addresses.
+
+    Args:
+        ip_addr (str): The IP address to look up.
+
+    Returns:
+        str: A 2-letter country code.
+
+    """
+    if ip_addr.find(':') >= 0:
+        return pygeoip.GeoIP(settings.GEOIPV6_PATH).country_code_by_addr(ip_addr)
+    else:
+        return pygeoip.GeoIP(settings.GEOIP_PATH).country_code_by_addr(ip_addr)
 
 
 def _get_message_url_path_from_db(course_key, access_point):
