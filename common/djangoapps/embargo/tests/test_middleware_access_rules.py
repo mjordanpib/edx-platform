@@ -118,6 +118,34 @@ class EmbargoMiddlewareAccessTests(UrlResetMixin, ModuleStoreTestCase):
             self.assertRedirects(response, redirect_url)
 
     @patch.dict(settings.FEATURES, {'ENABLE_COUNTRY_ACCESS': True})
+    @ddt.data(
+        ('courseware', 'default'),
+        ('courseware', 'embargo'),
+        ('enrollment', 'default'),
+        ('enrollment', 'embargo')
+    )
+    @ddt.unpack
+    def test_always_allow_access_to_embargo_messages(self, access_point, msg_key):
+        # Blacklist an IP address
+        IPFilter.objects.create(
+            blacklist="192.168.10.20"
+        )
+
+        url = reverse(
+            'embargo_blocked_message',
+            kwargs={
+                'access_point': access_point,
+                'message_key': msg_key
+            }
+        )
+        response = self.client.get(
+            url,
+            HTTP_X_FORWARDED_FOR="192.168.10.20",
+            REMOTE_ADDR="192.168.10.20"
+        )
+        self.assertEqual(response.status_code, 200)
+
+    @patch.dict(settings.FEATURES, {'ENABLE_COUNTRY_ACCESS': True})
     def test_whitelist_ip_skips_country_access_checks(self):
         # Whitelist an IP address
         IPFilter.objects.create(

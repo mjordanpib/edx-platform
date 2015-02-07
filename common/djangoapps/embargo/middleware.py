@@ -32,6 +32,7 @@ EMBARGO_SITE_REDIRECT_URL = 'https://www.edx.org/'
 """
 from functools import partial
 import logging
+import re
 import pygeoip
 from lazy import lazy
 
@@ -58,6 +59,8 @@ class EmbargoMiddleware(object):
     This is configured by creating ``EmbargoedCourse``, ``EmbargoedState``, and
     optionally ``IPFilter`` rows in the database, using the django admin site.
     """
+
+    ALLOW_URL_PATTERN = re.compile(r'^/embargo/blocked-message/')
 
     # Reasons a user might be blocked.
     # These are used to generate info messages in the logs.
@@ -91,6 +94,11 @@ class EmbargoMiddleware(object):
         # This is a more flexible implementation of the embargo feature that allows
         # per-course country access rules.
         if self.enable_country_access:
+
+            # Never block the embargo message URLs
+            if self.ALLOW_URL_PATTERN.match(request.path) is not None:
+                return None
+
             ip_address = get_ip(request)
 
             if ip_address in IPFilter.current().blacklist_ips:
