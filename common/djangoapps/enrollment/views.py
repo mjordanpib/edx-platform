@@ -295,7 +295,7 @@ class EnrollmentListView(APIView):
         # We do this at the view level (rather than the Python API level)
         # because this check requires information about the HTTP request.
         if settings.FEATURES.get('ENABLE_COUNTRY_ACCESS'):
-            if not embargo_api.check_access(user, get_ip(request), course_id):
+            if not embargo_api.check_course_access(user, get_ip(request), course_id, url=request.path):
                 return Response(
                     status=status.HTTP_403_FORBIDDEN,
                     data={

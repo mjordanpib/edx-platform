@@ -367,7 +367,9 @@ class EmbargoMiddleware(object):
         course_id = course_id_from_url(url_path)
         blocked = (
             course_id is not None and
-            not embargo_api.check_course_access(user, ip_address, course_id)
+            not embargo_api.check_course_access(
+                user, ip_address, course_id, url=url_path
+            )
         )
 
         if blocked:

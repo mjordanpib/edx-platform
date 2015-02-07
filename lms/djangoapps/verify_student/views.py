@@ -262,7 +262,7 @@ class PayAndVerifyView(View):
         # Check whether the user has access to this course
         # based on country access rules.
         if settings.FEATURES.get('ENABLE_COUNTRY_ACCESS'):
-            if not embargo_api.check_access(request.user, get_ip(request), course_key):
+            if not embargo_api.check_course_access(request.user, get_ip(request), course_key, url=request.path):
                 return redirect(embargo_api.message_url_path(course_key, 'enrollment'))
 
         # Verify that the course has a verified mode

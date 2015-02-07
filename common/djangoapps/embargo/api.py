@@ -19,14 +19,18 @@ from embargo.exceptions import InvalidAccessPoint
 log = logging.getLogger(__name__)
 
 
-def check_course_access(user, ip_address, course_key):
+def check_course_access(user, ip_address, course_key, url=None):
     """
     Check is the user with this ip_address has access to the given course
 
-    Params:
+    Arguments:
         user (User): Currently logged in user object
         ip_address (str): The ip_address of user
         course_key (CourseLocator): CourseLocator object the user is trying to access
+
+    Keyword Arguments:
+        url (str): The URL the user is trying to access.  Used in
+            log messages.
 
     Returns:
         Boolean: True if the user has access to the course; False otherwise
@@ -46,11 +50,11 @@ def check_course_access(user, ip_address, course_key):
     if not CountryAccessRule.check_country_access(course_key, user_country_from_ip):
         log.info(
             (
-                u"Blocking user %s from accessing course %s "
+                u"Blocking user %s from accessing course %s at %s"
                 u"because the user's IP address %s appears to be "
                 u"located in %s."
             ),
-            user.id, course_key, ip_address, user_country_from_ip
+            user.id, course_key, url, ip_address, user_country_from_ip
         )
         return False
 
@@ -61,10 +65,10 @@ def check_course_access(user, ip_address, course_key):
     if not CountryAccessRule.check_country_access(course_key, user_country_from_profile):
         log.info(
             (
-                u"Blocking user %s from accessing course %s "
+                u"Blocking user %s from accessing course %s at %s"
                 u"because the user's profile country is %s."
             ),
-            user.id, course_key, user_country_from_profile
+            user.id, course_key, url, user_country_from_profile
         )
         return False
 

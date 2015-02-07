@@ -884,7 +884,7 @@ def change_enrollment(request, check_access=True):
         # or if the user is enrolling in a country in which the course
         # is not available.
         if settings.FEATURES.get('ENABLE_COUNTRY_ACCESS'):
-            if not embargo_api.check_access(user, get_ip(request), course_id):
+            if not embargo_api.check_course_access(user, get_ip(request), course_id, url=request.path):
                 return HttpResponse(embargo_api.message_url_path(course_id, 'enrollment'))
 
         # Check that auto enrollment is allowed for this course
