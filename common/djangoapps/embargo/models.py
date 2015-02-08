@@ -12,10 +12,13 @@ file and check it in at the same time as your model changes. To do that,
 """
 
 import ipaddr
+import json
 
 from django.db import models
 from django.utils.translation import ugettext as _, ugettext_lazy
 from django.core.cache import cache
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 
 from django_countries.fields import CountryField
 from django_countries import countries
@@ -151,6 +154,43 @@ class RestrictedCourse(models.Model):
             restricted_courses = list(RestrictedCourse.objects.values_list('course_key', flat=True))
             cache.set(cls.CACHE_KEY, restricted_courses)
         return restricted_courses
+
+    def summarize_rules(self):
+        """Return a summary of all access rules for this course.
+
+        This is useful for recording an audit trail of rule changes.
+        The returned dictionary is JSON-serializable.
+
+        Returns:
+            dict
+
+        Example Usage:
+        >>> restricted_course.summarize_rules()
+        {
+            'enroll_msg': 'default',
+            'access_msg': 'default',
+            'country_rules': [
+                {'country': 'IR', 'rule_type': 'blacklist'},
+                {'country': 'CU', 'rule_type': 'blacklist'}
+            ]
+        }
+
+        """
+        country_rules_for_course = (
+            CountryAccessRule.objects
+        ).select_related('restricted_country').filter(restricted_course=self)
+
+        return {
+            'enroll_msg': self.enroll_msg_key,
+            'access_msg': self.access_msg_key,
+            'country_rules': [
+                {
+                    'country': unicode(rule.country.country),
+                    'rule_type': rule.rule_type
+                }
+                for rule in country_rules_for_course
+            ]
+        }
 
     def message_key_for_access_point(self, access_point):
         """Determine which message to show the user.
@@ -333,16 +373,12 @@ class CountryAccessRule(models.Model):
             )
 
     def save(self, *args, **kwargs):
-        """
-        Clear the cached value when saving a entry
-        """
+        """Clear the cached value when saving an entry. """
         super(CountryAccessRule, self).save(*args, **kwargs)
         self._invalidate_cache()
 
     def delete(self, using=None):
-        """
-        clear the cached value when saving a entry
-        """
+        """Clear the cached value when deleting an entry. """
         super(CountryAccessRule, self).delete()
         self._invalidate_cache()
 
@@ -357,6 +393,77 @@ class CountryAccessRule(models.Model):
             # either the whitelist or the blacklist, but
             # not both (for a particular course).
             ("restricted_course", "country")
+        )
+
+
+class CourseAccessRuleHistory(models.Model):
+    """History of course access rule changes. """
+
+    timestamp = models.DateTimeField(db_index=True, auto_now_add=True)
+    course_key = CourseKeyField(max_length=255, db_index=True)
+    rules = models.TextField(null=True, blank=True)
+
+    DELETED_PLACEHOLDER = "DELETED"
+
+    @receiver(post_save, sender=RestrictedCourse)
+    def restricted_course_post_save(sender, instance, **kwargs):
+        """Save a history entry when the restricted course changes. """
+        CourseAccessRuleHistory.save_rule_summary(instance)
+
+    @receiver(post_delete, sender=RestrictedCourse)
+    def restricted_course_post_delete(sender, instance, **kwargs):
+        """Save a history entry when a restricted course is deleted. """
+
+        # At the point this is called, the access rules may not have
+        # been deleted yet.  When the rules *are* deleted, the
+        # restricted course entry may no longer exist, so we
+        # won't be able to summarize the rules for the course.
+        # To handle this, we save a placeholder "DELETED" entry
+        # so that it's clear in the audit that the restricted
+        # course (along with all its rules) was deleted.
+        CourseAccessRuleHistory.objects.create(
+            course_key=instance.course_key,
+            rules=CourseAccessRuleHistory.DELETED_PLACEHOLDER
+        )
+
+    @receiver(post_save, sender=CountryAccessRule)
+    def country_access_post_save(sender, instance, **kwargs):
+        """Save a history entry when a country access rule changes. """
+        CourseAccessRuleHistory.save_rule_summary(instance.restricted_course)
+
+    @receiver(post_delete, sender=CountryAccessRule)
+    def country_access_post_delete(sender, instance, **kwargs):
+        """Save a history entry when a country access rule is deleted. """
+        try:
+            restricted_course = instance.restricted_course
+        except RestrictedCourse.DoesNotExist:
+            # When Django admin deletes a restricted course, it will
+            # also delete the rules associated with that course.
+            # At this point, we can't access the restricted course
+            # from the rule beause it may already have been deleted.
+            # If this happens, we don't need to record anything,
+            # since we already record a placeholder "DELETED"
+            # entry when the restricted course record is deleted.
+            pass
+        else:
+            CourseAccessRuleHistory.save_rule_summary(restricted_course)
+
+    @staticmethod
+    def save_rule_summary(restricted_course):
+        """Save a summary of the rules for a course to the database.
+
+        Arguments:
+            restricted_course (RestrictedCourse)
+
+        Returns:
+            None
+
+        """
+        rules_summary = restricted_course.summarize_rules()
+        rules_json = json.dumps(rules_summary)
+        CourseAccessRuleHistory.objects.create(
+            course_key=restricted_course.course_key,
+            rules=rules_json
         )
 
 
