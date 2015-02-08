@@ -5,6 +5,7 @@ import mock
 import pygeoip
 
 from django.core.urlresolvers import reverse
+from django.core.cache import cache
 from embargo.models import Country, CountryAccessRule, RestrictedCourse
 
 
@@ -39,6 +40,10 @@ def restrict_course(course_key, access_point="enrollment"):
     >>>     self.assertRedirects(resp, redirect_url)
 
     """
+    # Clear the cache to ensure that previous tests don't interfere
+    # with this test.
+    cache.clear()
+
     with mock.patch.object(pygeoip.GeoIP, 'country_code_by_addr') as mock_ip:
 
         # Remove all existing rules for the course
